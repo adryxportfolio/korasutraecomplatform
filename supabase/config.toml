@@ -1,0 +1,37 @@
+project_id = "iltyypblxerkwqglfvct"
+
+[functions.whatsapp-send-otp]
+verify_jwt = false
+
+[functions.whatsapp-verify-otp]
+verify_jwt = false
+
+[functions.admin-login]
+verify_jwt = false
+
+[functions.admin-commerce]
+verify_jwt = false
+
+[functions.admin-upload-image]
+verify_jwt = false
+
+[functions.razorpay-create-order]
+verify_jwt = false
+
+[functions.razorpay-verify]
+verify_jwt = false
+
+[functions.razorpay-webhook]
+verify_jwt = false
+
+[functions.place-order]
+verify_jwt = false
+
+[functions.coupon-validate]
+verify_jwt = false
+
+[functions.track-order]
+verify_jwt = false
+
+[functions.my-account]
+verify_jwt = false

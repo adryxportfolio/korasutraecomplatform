@@ -1,0 +1,234 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { supabase } from "@/integrations/supabase/client";
+import { loadLocalProductByHandle, loadLocalShopifyProducts } from "@/lib/localCommerce";
+import { textMatchesCatalogQuery } from "@/lib/catalogTaxonomy";
+
+export interface ShopifyProduct {
+  node: {
+    id: string;
+    title: string;
+    description: string;
+    handle: string;
+    tags?: string[];
+    priceRange: {
+      minVariantPrice: {
+        amount: string;
+        currencyCode: string;
+      };
+    };
+    images: {
+      edges: Array<{
+        node: {
+          url: string;
+          altText: string | null;
+        };
+      }>;
+    };
+    videos?: {
+      edges: Array<{
+        node: {
+          url: string;
+          altText: string | null;
+          contentType: string | null;
+        };
+      }>;
+    };
+    variants: {
+      edges: Array<{
+        node: {
+          id: string;
+          title: string;
+          sku: string | null;
+          price: {
+            amount: string;
+            currencyCode: string;
+          };
+          availableForSale: boolean;
+          selectedOptions: Array<{
+            name: string;
+            value: string;
+          }>;
+        };
+      }>;
+    };
+    options: Array<{
+      name: string;
+      values: string[];
+    }>;
+  };
+}
+
+type CatalogProductRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  handle: string;
+  tags: string[] | null;
+  price: number | string;
+  fabric: string | null;
+  technique: string | null;
+  color: string | null;
+  has_blouse_piece: boolean;
+  product_images?: Array<{ url: string; alt_text: string | null; position: number }>;
+  product_videos?: Array<{ url: string; alt_text: string | null; position: number; content_type: string | null }>;
+  product_variants?: Array<{
+    id: string;
+    sku: string | null;
+    title: string;
+    option1_name: string | null;
+    option1_value: string | null;
+    option2_name: string | null;
+    option2_value: string | null;
+    price: number | string | null;
+    inventory_qty: number;
+    track_inventory: boolean;
+    position: number;
+  }>;
+};
+
+function normalizeAmount(value: number | string | null | undefined) {
+  return Number(value || 0).toFixed(2);
+}
+
+function selectedOptionsForVariant(variant: CatalogProductRow["product_variants"][number]) {
+  return [
+    variant.option1_name && variant.option1_value ? { name: variant.option1_name, value: variant.option1_value } : null,
+    variant.option2_name && variant.option2_value ? { name: variant.option2_name, value: variant.option2_value } : null,
+  ].filter(Boolean) as Array<{ name: string; value: string }>;
+}
+
+function buildOptions(variants: CatalogProductRow["product_variants"] = []) {
+  const optionMap = new Map<string, Set<string>>();
+
+  variants.forEach((variant) => {
+    selectedOptionsForVariant(variant).forEach((option) => {
+      if (!optionMap.has(option.name)) optionMap.set(option.name, new Set());
+      optionMap.get(option.name)?.add(option.value);
+    });
+  });
+
+  return Array.from(optionMap.entries()).map(([name, values]) => ({
+    name,
+    values: Array.from(values),
+  }));
+}
+
+function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
+  const images = [...(row.product_images || [])].sort((a, b) => a.position - b.position);
+  const variants = [...(row.product_variants || [])].sort((a, b) => a.position - b.position);
+  const firstVariant = variants[0];
+  const minPrice = variants.reduce((min, variant) => {
+    const price = Number(variant.price ?? row.price);
+    return Math.min(min, price);
+  }, Number(firstVariant?.price ?? row.price));
+
+  return {
+    node: {
+      id: row.id,
+      title: row.title,
+      description: row.description || "",
+      handle: row.handle,
+      tags: [
+        ...(row.tags || []),
+        row.fabric,
+        row.technique,
+        row.color,
+        row.has_blouse_piece ? "with blouse" : null,
+      ].filter(Boolean) as string[],
+      priceRange: {
+        minVariantPrice: {
+          amount: normalizeAmount(minPrice),
+          currencyCode: "INR",
+        },
+      },
+      images: {
+        edges: images.map((image) => ({
+          node: {
+            url: image.url,
+            altText: image.alt_text,
+          },
+        })),
+      },
+      videos: {
+        edges: [...(row.product_videos || [])].sort((a, b) => a.position - b.position).map((video) => ({
+          node: {
+            url: video.url,
+            altText: video.alt_text,
+            contentType: video.content_type || "video/mp4",
+          },
+        })),
+      },
+      variants: {
+        edges: variants.map((variant) => ({
+          node: {
+            id: variant.id,
+            title: variant.title || "Default",
+            sku: variant.sku,
+            price: {
+              amount: normalizeAmount(variant.price ?? row.price),
+              currencyCode: "INR",
+            },
+            availableForSale: !variant.track_inventory || variant.inventory_qty > 0,
+            selectedOptions: selectedOptionsForVariant(variant),
+          },
+        })),
+      },
+      options: buildOptions(variants),
+    },
+  };
+}
+
+function baseProductSelect() {
+  return "id, title, description, handle, tags, price, fabric, technique, color, has_blouse_piece, product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value, price, inventory_qty, track_inventory, position)";
+}
+
+export async function fetchProducts(first: number = 20, query?: string): Promise<ShopifyProduct[]> {
+  try {
+    const request = (supabase as any)
+      .from("products")
+      .select(baseProductSelect())
+      .eq("status", "active")
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(query?.trim() ? Math.max(first, 500) : first);
+
+    const { data, error } = await request;
+    if (error) throw error;
+    if (!data?.length) return loadLocalShopifyProducts(first, query);
+    const rows = query?.trim()
+      ? data.filter((row: CatalogProductRow) => textMatchesCatalogQuery(`${row.title} ${row.description || ""} ${row.fabric || ""} ${row.technique || ""} ${row.color || ""}`, row.tags || [], query))
+      : data;
+    return rows.slice(0, first).map(mapCatalogProduct);
+  } catch (error) {
+    console.error("Error fetching catalog products:", error);
+    return loadLocalShopifyProducts(first, query);
+  }
+}
+
+export async function fetchProductByHandle(handle: string): Promise<ShopifyProduct["node"] | null> {
+  try {
+    const { data, error } = await (supabase as any)
+      .from("products")
+      .select(baseProductSelect())
+      .eq("handle", handle)
+      .eq("status", "active")
+      .single();
+
+    if (error || !data) return loadLocalProductByHandle(handle);
+    return mapCatalogProduct(data).node;
+  } catch (error) {
+    console.error("Error fetching catalog product:", error);
+    return loadLocalProductByHandle(handle);
+  }
+}
+
+export async function createStorefrontCheckout(): Promise<string> {
+  return "/checkout";
+}
+
+export function formatPrice(amount: string, currencyCode: string = "INR"): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: currencyCode,
+  }).format(parseFloat(amount));
+}
