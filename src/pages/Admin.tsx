@@ -4,14 +4,18 @@ import {
   BarChart3,
   Boxes,
   ChevronDown,
+  Image as ImageIcon,
   IndianRupee,
   LayoutDashboard,
+  Link2,
   Loader2,
   LogOut,
   Megaphone,
   Package,
   Plus,
+  Radio,
   RefreshCw,
+  Save,
   Search,
   Shield,
   ShoppingBag,
@@ -44,7 +48,16 @@ import {
   saveLocalCoupon,
 } from "@/lib/localCommerce";
 import { CatalogTaxonomyGroup, catalogTaxonomy, selectionFromTags, tagsForCatalogSelection } from "@/lib/catalogTaxonomy";
-import { defaultSiteSettings, normalizeSiteSettings, siteSettingsToRow, type SiteSettings } from "@/lib/siteSettings";
+import { broadcastCommerceChange, subscribeToCommerceRealtime } from "@/lib/realtimeTables";
+import {
+  SITE_SETTINGS_BROADCAST_EVENT,
+  SITE_SETTINGS_REALTIME_CHANNEL,
+  cacheSiteSettings,
+  defaultSiteSettings,
+  normalizeSiteSettings,
+  siteSettingsToRow,
+  type SiteSettings,
+} from "@/lib/siteSettings";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -201,6 +214,36 @@ export default function Admin() {
     return result;
   }, [adminToken]);
 
+  const broadcastSiteSettingsUpdate = useCallback(async (nextSettings: SiteSettings) => {
+    if (isLocalAdmin) return;
+
+    await new Promise<void>((resolve) => {
+      const channel = supabase.channel(SITE_SETTINGS_REALTIME_CHANNEL, { config: { broadcast: { self: true } } });
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        supabase.removeChannel(channel);
+        resolve();
+      };
+      const timeout = window.setTimeout(finish, 2500);
+
+      channel.subscribe(async (status) => {
+        if (status !== "SUBSCRIBED") return;
+        try {
+          await channel.send({
+            type: "broadcast",
+            event: SITE_SETTINGS_BROADCAST_EVENT,
+            payload: { settings: siteSettingsToRow(nextSettings), savedAt: new Date().toISOString() },
+          });
+        } finally {
+          finish();
+        }
+      });
+    });
+  }, [isLocalAdmin]);
+
   const fetchAdminData = useCallback(async () => {
     if (!adminToken) return;
     setIsLoading(true);
@@ -246,25 +289,12 @@ export default function Admin() {
       document.removeEventListener("visibilitychange", refreshOnFocus);
     };
 
-    const channel = supabase
-      .channel("admin-commerce-sync")
-      .on("postgres_changes", { event: "*", schema: "public", table: "products" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "product_images" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "product_videos" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "product_variants" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "coupons" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "coupon_redemptions" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, fetchAdminData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "site_settings" }, fetchAdminData)
-      .subscribe();
+    const unsubscribe = subscribeToCommerceRealtime(supabase, "admin-commerce-sync", fetchAdminData);
 
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", refreshOnFocus);
-      supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, [adminToken, fetchAdminData, isLocalAdmin]);
 
@@ -381,7 +411,7 @@ export default function Admin() {
       const uploadedVideo = await uploadProductMedia("video");
       if (uploadedImage.url.includes("shopify.com") || uploadedVideo.url.includes("shopify.com")) throw new Error("Please upload product media to Kora Sutra storage instead of Shopify CDN");
       const catalogTags = tagsForCatalogSelection(productForm.catalogSelection);
-      await api({
+      const result = await api({
         method: "POST",
         body: {
           action: "upsert-product",
@@ -402,6 +432,7 @@ export default function Admin() {
           },
         },
       });
+      await broadcastCommerceChange(supabase, { action: "product-updated", table: "products", productId: result.productId });
       toast.success("Product saved");
       resetProductForm();
       fetchAdminData();
@@ -604,10 +635,13 @@ export default function Admin() {
           settings: nextSettings,
         },
       });
+      cacheSiteSettings(nextSettings);
+      await broadcastSiteSettingsUpdate(nextSettings);
+      await broadcastCommerceChange(supabase, { action: "site-settings-updated", table: "site_settings" });
       setHeroDesktopFile(null);
       setHeroMobileFile(null);
       setSiteSettingsForm(nextSettings);
-      toast.success("Website content synced");
+      toast.success("Website content synced live");
       fetchAdminData();
     } catch (error) {
       toast.error("Unable to save website content", { description: error instanceof Error ? error.message : undefined });
@@ -616,7 +650,7 @@ export default function Admin() {
 
   const updateOrder = async (order: any, updates: Record<string, unknown>) => {
     try {
-      await api({
+      const result = await api({
         method: "POST",
         body: {
           action: "update-order",
@@ -629,7 +663,23 @@ export default function Admin() {
           notes: updates.notes ?? order.notes,
         },
       });
-      toast.success("Order updated");
+      await broadcastCommerceChange(supabase, {
+        action: "order-updated",
+        table: "orders",
+        orderId: order.id,
+        orderNumber: order.order_number,
+        customerId: order.customer_id,
+      });
+      toast.success(
+        isLocalAdmin
+          ? "Order updated locally"
+          : result.emailSent === false
+            ? "Order updated; customer email was not sent"
+            : "Order updated and customer notified",
+        {
+          description: result.emailSent === false ? result.emailReason || "Check Resend configuration and customer email." : undefined,
+        },
+      );
       fetchAdminData();
     } catch (error) {
       toast.error("Unable to update order", { description: error instanceof Error ? error.message : undefined });
@@ -639,6 +689,7 @@ export default function Admin() {
   const adjustInventory = async (variantId: string, delta: number) => {
     try {
       await api({ method: "POST", body: { action: "adjust-inventory", variantId, delta, reason: delta > 0 ? "restock" : "adjustment" } });
+      await broadcastCommerceChange(supabase, { action: "inventory-updated", tables: ["product_variants", "inventory_movements"] });
       toast.success("Inventory updated");
       fetchAdminData();
     } catch (error) {
@@ -651,7 +702,7 @@ export default function Admin() {
   const saveCoupon = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      await api({
+      const result = await api({
         method: "POST",
         body: {
           action: "upsert-coupon",
@@ -665,6 +716,7 @@ export default function Admin() {
           },
         },
       });
+      await broadcastCommerceChange(supabase, { action: "coupon-updated", table: "coupons", couponId: result.couponId });
       toast.success("Coupon saved");
       resetCouponForm();
       fetchAdminData();
@@ -711,6 +763,7 @@ export default function Admin() {
   const deleteCoupon = async (coupon: any) => {
     try {
       await api({ method: "POST", body: { action: "delete-coupon", couponId: coupon.id } });
+      await broadcastCommerceChange(supabase, { action: "coupon-deleted", table: "coupons", couponId: coupon.id });
       toast.success("Coupon deleted");
       fetchAdminData();
     } catch (error) {
@@ -1130,8 +1183,41 @@ export default function Admin() {
 
           {section === "settings" && (
             <div className="space-y-4">
-              <Panel title="Website Hero, Navbar & Promotions">
+              <Panel title="Website Studio">
                 <form onSubmit={saveSiteContent} className="space-y-6">
+                  <div className="rounded-sm border border-primary/20 bg-primary/5 p-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-body font-medium">Live storefront controls</p>
+                        <p className="text-xs text-muted-foreground">Hero, navigation, and popup edits publish through realtime sync as soon as you save.</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="bg-green-100 text-green-800 border-green-200"><Radio className="w-3 h-3 mr-1" />Realtime</Badge>
+                        <Badge variant="outline">{siteSettingsForm.promoPopup.enabled ? "Popup live" : "Popup off"}</Badge>
+                        <Badge variant="outline">{siteSettingsForm.navbar.navLinks.filter((link) => link.enabled).length} nav links</Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <div className="border border-border rounded-sm p-3 bg-background">
+                      <div className="flex items-center gap-2 text-sm font-body font-medium"><ImageIcon className="w-4 h-4 text-primary" />Hero</div>
+                      <p className="text-xs text-muted-foreground mt-1">Desktop and mobile visuals with CTA.</p>
+                    </div>
+                    <div className="border border-border rounded-sm p-3 bg-background">
+                      <div className="flex items-center gap-2 text-sm font-body font-medium"><Link2 className="w-4 h-4 text-primary" />Navbar</div>
+                      <p className="text-xs text-muted-foreground mt-1">Announcement and menu links.</p>
+                    </div>
+                    <div className="border border-border rounded-sm p-3 bg-background">
+                      <div className="flex items-center gap-2 text-sm font-body font-medium"><Megaphone className="w-4 h-4 text-primary" />Promotions</div>
+                      <p className="text-xs text-muted-foreground mt-1">Optional event or discount popup.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-primary" />
+                    <p className="text-sm font-body font-medium">Hero Section</p>
+                  </div>
                   <div className="grid md:grid-cols-2 gap-4">
                     <Field label="Hero Desktop Image"><Input type="file" accept="image/*" onChange={(event) => selectSiteImage(event.target.files?.[0] || null, "desktop")} /></Field>
                     <Field label="Hero Desktop Image URL"><Input value={siteSettingsForm.hero.desktopImageUrl} onChange={(event) => setSiteSettingsForm({ ...siteSettingsForm, hero: { ...siteSettingsForm.hero, desktopImageUrl: event.target.value } })} placeholder="Uses bundled image when empty" /></Field>
@@ -1155,6 +1241,10 @@ export default function Admin() {
                     </div>
                   )}
 
+                  <div className="flex items-center gap-2">
+                    <Link2 className="w-4 h-4 text-primary" />
+                    <p className="text-sm font-body font-medium">Navbar</p>
+                  </div>
                   <div className="grid md:grid-cols-2 gap-4">
                     <ToggleRow label="Show announcement bar" checked={siteSettingsForm.navbar.announcementEnabled} onCheckedChange={(checked) => setSiteSettingsForm({ ...siteSettingsForm, navbar: { ...siteSettingsForm.navbar, announcementEnabled: checked } })} />
                     <Field label="Announcement Link"><Input value={siteSettingsForm.navbar.announcementHref} onChange={(event) => setSiteSettingsForm({ ...siteSettingsForm, navbar: { ...siteSettingsForm.navbar, announcementHref: event.target.value } })} /></Field>
@@ -1197,7 +1287,9 @@ export default function Admin() {
                     <Field label="Fine Print"><Input value={siteSettingsForm.promoPopup.finePrint} onChange={(event) => setSiteSettingsForm({ ...siteSettingsForm, promoPopup: { ...siteSettingsForm.promoPopup, finePrint: event.target.value } })} /></Field>
                   </div>
 
-                  <Button type="submit">Save & Sync Website</Button>
+                  <div className="flex justify-end border-t border-border pt-4">
+                    <Button type="submit" className="min-w-48"><Save className="w-4 h-4 mr-2" />Save & Sync Website</Button>
+                  </div>
                 </form>
               </Panel>
 

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isAccountHistoryView } from "@/lib/accountHistoryView";
 import { CUSTOMER_SESSION_CHANGED_EVENT, getCustomerSessionToken } from "@/lib/customerSession";
+import { supabase } from "@/integrations/supabase/client";
+import { subscribeToCommerceRealtime } from "@/lib/realtimeTables";
 import { formatPrice } from "@/lib/shopify";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -56,61 +58,84 @@ export default function OrderTracking() {
     };
   }, []);
 
-  useEffect(() => {
-    async function loadOrder(showSpinner = false) {
-      if (!orderNumber) return;
-      if (!sessionToken && !submittedPhone) {
-        setLoading(false);
-        setOrder(null);
-        setErrorMessage("Enter the phone number used for this order.");
-        return;
-      }
-      if (showSpinner) setLoading(true);
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/track-order`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(sessionToken ? { "x-session-token": sessionToken } : {}),
-        },
-        body: JSON.stringify({ orderNumber, phone: submittedPhone }),
-      });
-      const data = await response.json().catch(() => ({}));
-      setOrder(response.ok ? data.order || null : null);
-      setErrorMessage(response.ok ? "" : data.error || "Order not found");
+  const loadOrder = useCallback(async (showSpinner = false) => {
+    if (!orderNumber) return;
+    if (!sessionToken && !submittedPhone) {
       setLoading(false);
+      setOrder(null);
+      setErrorMessage("Enter the phone number used for this order.");
+      return;
     }
+    if (showSpinner) setLoading(true);
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/track-order`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionToken ? { "x-session-token": sessionToken } : {}),
+      },
+      body: JSON.stringify({ orderNumber, phone: submittedPhone }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setOrder(response.ok ? data.order || null : null);
+    setErrorMessage(response.ok ? "" : data.error || "Order not found");
+    setLoading(false);
+  }, [orderNumber, sessionToken, submittedPhone]);
+
+  const loadAccountOrders = useCallback(async (showSpinner = true) => {
+    if (!showHistory) return;
+    if (!sessionToken) {
+      setAccountOrders([]);
+      setHistoryError("Sign in with WhatsApp OTP from the account button to view your order history.");
+      return;
+    }
+
+    if (showSpinner) setHistoryLoading(true);
+    setHistoryError("");
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/my-account`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-session-token": sessionToken,
+      },
+      body: JSON.stringify({}),
+    });
+    const data = await response.json().catch(() => ({}));
+    setAccountOrders(response.ok ? data.orders || [] : []);
+    setHistoryError(response.ok ? "" : data.error || "Unable to load order history");
+    setHistoryLoading(false);
+  }, [sessionToken, showHistory]);
+
+  useEffect(() => {
     loadOrder(true);
     const interval = window.setInterval(() => loadOrder(false), 10_000);
     return () => window.clearInterval(interval);
-  }, [orderNumber, sessionToken, submittedPhone]);
+  }, [loadOrder]);
 
   useEffect(() => {
-    async function loadAccountOrders() {
-      if (!showHistory) return;
-      if (!sessionToken) {
-        setAccountOrders([]);
-        setHistoryError("Sign in with WhatsApp OTP from the account button to view your order history.");
-        return;
-      }
+    loadAccountOrders(true);
+  }, [loadAccountOrders]);
 
-      setHistoryLoading(true);
-      setHistoryError("");
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/my-account`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-session-token": sessionToken,
-        },
-        body: JSON.stringify({}),
-      });
-      const data = await response.json().catch(() => ({}));
-      setAccountOrders(response.ok ? data.orders || [] : []);
-      setHistoryError(response.ok ? "" : data.error || "Unable to load order history");
-      setHistoryLoading(false);
-    }
-
-    loadAccountOrders();
-  }, [sessionToken, showHistory]);
+  useEffect(() => {
+    if (!orderNumber && !showHistory) return;
+    let refreshTimer = 0;
+    const refreshLiveOrderState = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        loadOrder(false);
+        loadAccountOrders(false);
+      }, 150);
+    };
+    const unsubscribe = subscribeToCommerceRealtime(
+      supabase,
+      `order-tracking-sync-${orderNumber || "history"}`,
+      refreshLiveOrderState,
+      ["orders", "order_items", "customers"],
+    );
+    return () => {
+      window.clearTimeout(refreshTimer);
+      unsubscribe();
+    };
+  }, [loadAccountOrders, loadOrder, orderNumber, showHistory]);
 
   const activeIndex = useMemo(() => {
     if (!order?.status) return 0;

@@ -1,4 +1,5 @@
 export const storefrontRealtimeTables = [
+  "categories",
   "products",
   "product_images",
   "product_videos",
@@ -7,28 +8,96 @@ export const storefrontRealtimeTables = [
   "coupon_redemptions",
   "orders",
   "order_items",
+  "customers",
+  "customer_addresses",
+  "inventory_movements",
   "site_settings",
 ] as const;
 
+export const COMMERCE_REALTIME_CHANNEL = "commerce-sync";
+export const COMMERCE_BROADCAST_EVENT = "commerce-updated";
+
+export type CommerceRealtimePayload = {
+  action: string;
+  table?: string;
+  tables?: string[];
+  orderId?: string;
+  orderNumber?: string;
+  customerId?: string;
+  productId?: string;
+  couponId?: string;
+  savedAt?: string;
+};
+
 type RealtimeChannel = {
-  on: (type: "postgres_changes", filter: { event: "*"; schema: "public"; table: string }, callback: () => void) => RealtimeChannel;
-  subscribe: () => RealtimeChannel;
+  on: (
+    type: "postgres_changes" | "broadcast",
+    filter: { event: "*"; schema: "public"; table: string } | { event: string },
+    callback: (payload?: { payload?: CommerceRealtimePayload }) => void,
+  ) => RealtimeChannel;
+  subscribe: (callback?: (status: string) => void) => RealtimeChannel;
+  send?: (payload: { type: "broadcast"; event: string; payload: CommerceRealtimePayload }) => Promise<unknown>;
 };
 
 type RealtimeClient = {
-  channel: (name: string) => RealtimeChannel;
+  channel: (name: string, options?: Record<string, unknown>) => RealtimeChannel;
   removeChannel: (channel: RealtimeChannel) => unknown;
 };
 
 export function subscribeToStorefrontRealtime(supabaseClient: RealtimeClient, channelName: string, onChange: () => void) {
-  const channel = storefrontRealtimeTables
+  return subscribeToCommerceRealtime(supabaseClient, channelName, onChange);
+}
+
+export function subscribeToCommerceRealtime(
+  supabaseClient: RealtimeClient,
+  channelName: string,
+  onChange: (payload?: CommerceRealtimePayload) => void,
+  tables: readonly string[] = storefrontRealtimeTables,
+) {
+  const postgresChannel = tables
     .reduce(
-      (nextChannel, table) => nextChannel.on("postgres_changes", { event: "*", schema: "public", table }, onChange),
+      (nextChannel, table) => nextChannel.on("postgres_changes", { event: "*", schema: "public", table }, () => onChange()),
       supabaseClient.channel(channelName),
     )
     .subscribe();
 
+  const broadcastChannel = supabaseClient
+    .channel(COMMERCE_REALTIME_CHANNEL, { config: { broadcast: { self: false } } })
+    .on("broadcast", { event: COMMERCE_BROADCAST_EVENT }, (event) => onChange(event?.payload))
+    .subscribe();
+
   return () => {
-    supabaseClient.removeChannel(channel);
+    supabaseClient.removeChannel(postgresChannel);
+    supabaseClient.removeChannel(broadcastChannel);
   };
+}
+
+export async function broadcastCommerceChange(supabaseClient: RealtimeClient, payload: CommerceRealtimePayload) {
+  const channel = supabaseClient.channel(COMMERCE_REALTIME_CHANNEL, { config: { broadcast: { self: true } } });
+  const message = {
+    type: "broadcast" as const,
+    event: COMMERCE_BROADCAST_EVENT,
+    payload: { ...payload, savedAt: payload.savedAt || new Date().toISOString() },
+  };
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      supabaseClient.removeChannel(channel);
+      resolve();
+    };
+    const timeout = window.setTimeout(finish, 2500);
+
+    channel.subscribe(async (status) => {
+      if (status !== "SUBSCRIBED") return;
+      try {
+        await channel.send?.(message);
+      } finally {
+        finish();
+      }
+    });
+  });
 }

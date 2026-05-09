@@ -32,6 +32,79 @@ async function validateAdminToken(supabase: any, token: string | null) {
   return data;
 }
 
+async function notifyCommerceSync(payload: Record<string, unknown>) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) return;
+
+    const response = await fetch(`${supabaseUrl}/realtime/v1/api/broadcast`, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messages: [{
+          topic: "commerce-sync",
+          event: "commerce-updated",
+          payload: { ...payload, savedAt: new Date().toISOString() },
+        }],
+      }),
+    });
+    if (!response.ok) {
+      console.error("Commerce realtime broadcast failed:", response.status, await response.text());
+    }
+  } catch (error) {
+    console.error("Commerce realtime broadcast error:", error);
+  }
+}
+
+async function sendOrderUpdateEmail(order: any) {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  const from = Deno.env.get("RESEND_FROM_EMAIL") || "Kora Sutra <orders@korasutra.com>";
+  if (!apiKey) return { sent: false, reason: "RESEND_API_KEY is not configured" };
+  if (!order?.contact_email) return { sent: false, reason: "Customer email is missing" };
+
+  const trackingHtml = order.tracking_number || order.tracking_url || order.carrier
+    ? `
+      <p><strong>Carrier:</strong> ${order.carrier || "-"}</p>
+      <p><strong>Tracking number:</strong> ${order.tracking_number || "-"}</p>
+      ${order.tracking_url ? `<p><a href="${order.tracking_url}">Track shipment</a></p>` : ""}
+    `
+    : "";
+
+  const itemsHtml = (order.order_items || [])
+    .map((item: any) => `<li>${item.quantity}x ${item.product_title} - INR ${item.line_total}</li>`)
+    .join("");
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: [order.contact_email],
+      subject: `Order ${order.order_number} update - Korasutra`,
+      html: `
+        <h2>Your Kora Sutra order was updated</h2>
+        <p>Order <strong>${order.order_number}</strong> is now <strong>${String(order.status || "").replace("_", " ")}</strong>.</p>
+        <p>Payment status: <strong>${String(order.payment_status || "").replace("_", " ")}</strong></p>
+        ${trackingHtml}
+        <p>Track your order: <a href="https://korasutra.com/order-tracking/${order.order_number}">https://korasutra.com/order-tracking/${order.order_number}</a></p>
+        ${itemsHtml ? `<ul>${itemsHtml}</ul>` : ""}
+      `,
+    }),
+  });
+
+  if (!response.ok) {
+    const reason = `Resend ${response.status}: ${await response.text()}`;
+    console.error(`Order update email failed for ${order.order_number}:`, reason);
+    return { sent: false, reason };
+  }
+  return { sent: true, reason: "" };
+}
+
 async function saveProduct(supabase: any, product: any) {
   const { data: category } = await supabase.from("categories").select("id").eq("slug", product.categorySlug || "sarees").single();
   const payload = {
@@ -245,7 +318,21 @@ serve(async (req: Request): Promise<Response> => {
 
         const { error } = await supabase.from("orders").update(updates).eq("id", body.orderId);
         if (error) return json({ error: "Unable to update order" }, 500);
-        return json({ success: true });
+
+        const { data: updatedOrder } = await supabase
+          .from("orders")
+          .select("*, order_items(*)")
+          .eq("id", body.orderId)
+          .single();
+        const emailResult = updatedOrder ? await sendOrderUpdateEmail(updatedOrder) : { sent: false, reason: "Updated order could not be loaded" };
+        await notifyCommerceSync({
+          action: "order-updated",
+          table: "orders",
+          orderId: body.orderId,
+          orderNumber: updatedOrder?.order_number,
+          customerId: updatedOrder?.customer_id,
+        });
+        return json({ success: true, emailSent: emailResult.sent, emailReason: emailResult.reason });
       }
 
       if (body.action === "adjust-inventory") {
@@ -268,11 +355,13 @@ serve(async (req: Request): Promise<Response> => {
           reason: body.reason || "adjustment",
           reference: body.reference || "admin",
         });
+        await notifyCommerceSync({ action: "inventory-updated", tables: ["product_variants", "inventory_movements"], variantId: body.variantId });
         return json({ success: true, inventoryQty: nextQty });
       }
 
       if (body.action === "upsert-product") {
         const productId = await saveProduct(supabase, body.product || {});
+        await notifyCommerceSync({ action: "product-updated", table: "products", productId });
         return json({ success: true, productId });
       }
 
@@ -294,22 +383,26 @@ serve(async (req: Request): Promise<Response> => {
           }
         }
 
+        await notifyCommerceSync({ action: "products-imported", tables: ["products", "product_images", "product_videos", "product_variants"] });
         return json({ success: failed.length === 0, imported, failed });
       }
 
       if (body.action === "upsert-coupon") {
         const couponId = await saveCoupon(supabase, body.coupon || {});
+        await notifyCommerceSync({ action: "coupon-updated", table: "coupons", couponId });
         return json({ success: true, couponId });
       }
 
       if (body.action === "delete-coupon") {
         const { error } = await supabase.from("coupons").delete().eq("id", body.couponId);
         if (error) return json({ error: "Unable to delete coupon" }, 500);
+        await notifyCommerceSync({ action: "coupon-deleted", table: "coupons", couponId: body.couponId });
         return json({ success: true });
       }
 
       if (body.action === "upsert-site-settings") {
         const siteSettings = await saveSiteSettings(supabase, body.settings || {});
+        await notifyCommerceSync({ action: "site-settings-updated", table: "site_settings" });
         return json({ success: true, siteSettings });
       }
 

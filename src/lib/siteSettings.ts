@@ -41,7 +41,13 @@ export type SiteSettingsRow = {
   hero?: Partial<SiteHeroSettings> | null;
   navbar?: Partial<SiteNavbarSettings> | null;
   promo_popup?: Partial<SitePromoPopupSettings> | null;
+  promoPopup?: Partial<SitePromoPopupSettings> | null;
 };
+
+export const SITE_SETTINGS_STORAGE_KEY = "ks_site_settings";
+export const SITE_SETTINGS_CHANGED_EVENT = "ks-site-settings-changed";
+export const SITE_SETTINGS_REALTIME_CHANNEL = "site-settings-sync";
+export const SITE_SETTINGS_BROADCAST_EVENT = "site-settings-updated";
 
 export const defaultSiteSettings: SiteSettings = {
   hero: {
@@ -88,7 +94,7 @@ function cleanNavLinks(value: unknown): SiteNavLink[] {
 export function normalizeSiteSettings(row: SiteSettingsRow | null | undefined): SiteSettings {
   const hero = row?.hero || {};
   const navbar = row?.navbar || {};
-  const promoPopup = row?.promo_popup || {};
+  const promoPopup = row?.promo_popup || row?.promoPopup || {};
 
   return {
     hero: {
@@ -116,4 +122,32 @@ export function siteSettingsToRow(settings: SiteSettings) {
     navbar: settings.navbar,
     promo_popup: settings.promoPopup,
   };
+}
+
+function browserStorageAvailable() {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+export function readCachedSiteSettings(): SiteSettings | null {
+  if (!browserStorageAvailable()) return null;
+
+  try {
+    const stored = window.localStorage.getItem(SITE_SETTINGS_STORAGE_KEY);
+    return stored ? normalizeSiteSettings(JSON.parse(stored) as SiteSettingsRow) : null;
+  } catch (error) {
+    console.error("Unable to read cached site settings:", error);
+    return null;
+  }
+}
+
+export function cacheSiteSettings(settings: SiteSettings) {
+  if (!browserStorageAvailable()) return;
+
+  try {
+    const normalized = normalizeSiteSettings(siteSettingsToRow(settings));
+    window.localStorage.setItem(SITE_SETTINGS_STORAGE_KEY, JSON.stringify(siteSettingsToRow(normalized)));
+    window.dispatchEvent(new CustomEvent(SITE_SETTINGS_CHANGED_EVENT, { detail: { settings: normalized } }));
+  } catch (error) {
+    console.error("Unable to cache site settings:", error);
+  }
 }

@@ -5,8 +5,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
 import { customerAccountLinks, type CustomerAccountLink } from "@/lib/accountMenuLinks";
 import { FunctionRequestError, requestJson } from "@/lib/functionClient";
+import { subscribeToCommerceRealtime } from "@/lib/realtimeTables";
 import {
   clearCustomerSessionToken,
   CUSTOMER_SESSION_CHANGED_EVENT,
@@ -45,6 +47,21 @@ type AccountData = {
   orders: AccountOrder[];
 };
 
+type SendOtpResult = {
+  verificationId: string;
+  destination?: string;
+};
+
+type VerifyOtpResult = {
+  token: string;
+  customer?: {
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    country_code?: string | null;
+  };
+};
+
 const accountLinkIcons: Record<CustomerAccountLink["icon"], typeof PackageSearch> = {
   status: PackageSearch,
   history: History,
@@ -71,7 +88,7 @@ export function AccountMenu() {
   const [isLoadingAccount, setIsLoadingAccount] = useState(false);
   const [accountLoadError, setAccountLoadError] = useState("");
 
-  const callFunction = useCallback(async (name: string, body: Record<string, unknown> = {}, token = sessionToken, timeoutMs = ACCOUNT_REQUEST_TIMEOUT_MS) => {
+  const callFunction = useCallback(async <T,>(name: string, body: Record<string, unknown> = {}, token = sessionToken, timeoutMs = ACCOUNT_REQUEST_TIMEOUT_MS): Promise<T> => {
     return requestJson(`${SUPABASE_URL}/functions/v1/${name}`, {
       method: "POST",
       headers: {
@@ -80,7 +97,7 @@ export function AccountMenu() {
       },
       body,
       timeoutMs,
-    });
+    }) as Promise<T>;
   }, [sessionToken]);
 
   const loadAccount = useCallback(async (token = sessionToken) => {
@@ -88,7 +105,7 @@ export function AccountMenu() {
     setIsLoadingAccount(true);
     setAccountLoadError("");
     try {
-      const data = await callFunction("my-account", {}, token);
+      const data = await callFunction<AccountData>("my-account", {}, token);
       setAccount(data);
       setCustomerSessionProfile({
         countryCode: data.customer?.country_code || countryCode,
@@ -131,6 +148,25 @@ export function AccountMenu() {
     if (open && sessionToken) loadAccount(sessionToken);
   }, [loadAccount, open, sessionToken]);
 
+  useEffect(() => {
+    if (!sessionToken) return;
+    let refreshTimer = 0;
+    const refreshAccount = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => loadAccount(sessionToken), 150);
+    };
+    const unsubscribe = subscribeToCommerceRealtime(
+      supabase,
+      "customer-account-sync",
+      refreshAccount,
+      ["orders", "order_items", "customers"],
+    );
+    return () => {
+      window.clearTimeout(refreshTimer);
+      unsubscribe();
+    };
+  }, [loadAccount, sessionToken]);
+
   const sendOtp = async () => {
     if (!phone.trim()) {
       toast.error("Enter your mobile number first", { position: "top-center" });
@@ -138,7 +174,7 @@ export function AccountMenu() {
     }
     setIsSendingOtp(true);
     try {
-      const result = await callFunction("whatsapp-send-otp", {
+      const result = await callFunction<SendOtpResult>("whatsapp-send-otp", {
         phone,
         countryCode,
         name: "Kora Sutra Customer",
@@ -164,7 +200,7 @@ export function AccountMenu() {
     }
     setIsVerifyingOtp(true);
     try {
-      const result = await callFunction("whatsapp-verify-otp", {
+      const result = await callFunction<VerifyOtpResult>("whatsapp-verify-otp", {
         verificationId,
         phone,
         countryCode,

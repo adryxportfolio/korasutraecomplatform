@@ -2,11 +2,10 @@
 import { AdminImportProduct, parseShopifyProductsCsv } from "@/lib/shopifyCsv";
 import type { ShopifyProduct } from "@/lib/shopify";
 import { textMatchesCatalogQuery } from "@/lib/catalogTaxonomy";
-import { defaultSiteSettings, type SiteSettings } from "@/lib/siteSettings";
+import { cacheSiteSettings, defaultSiteSettings, readCachedSiteSettings, type SiteSettings } from "@/lib/siteSettings";
 
 const LOCAL_PRODUCTS_KEY = "ks_local_products";
 const LOCAL_COUPONS_KEY = "ks_local_coupons";
-const LOCAL_SITE_SETTINGS_KEY = "ks_local_site_settings";
 const LOCAL_ADMIN_HASH_KEY = "ks_local_admin_hash";
 const LOCAL_ADMIN_HASH = "9d3bfeceeeab8f06130d094b83f2bd5f574dc495ab1c6927ad5f77ed8d0d3061";
 const LOCAL_ADMIN_USERNAME = "korasutra.official@gmail.com";
@@ -188,16 +187,11 @@ function writeStoredCoupons(coupons: any[]) {
 }
 
 function readStoredSiteSettings(): SiteSettings {
-  try {
-    const raw = localStorage.getItem(LOCAL_SITE_SETTINGS_KEY);
-    return raw ? { ...defaultSiteSettings, ...JSON.parse(raw) } : defaultSiteSettings;
-  } catch {
-    return defaultSiteSettings;
-  }
+  return readCachedSiteSettings() || defaultSiteSettings;
 }
 
 function writeStoredSiteSettings(settings: SiteSettings) {
-  localStorage.setItem(LOCAL_SITE_SETTINGS_KEY, JSON.stringify(settings));
+  cacheSiteSettings(settings);
 }
 
 function normalizeStoredProducts(products: any[]) {
@@ -384,6 +378,5 @@ export async function deleteLocalCoupon(couponId: string) {
 
 export async function saveLocalSiteSettings(settings: SiteSettings) {
   writeStoredSiteSettings(settings);
-  window.dispatchEvent(new StorageEvent("storage", { key: LOCAL_SITE_SETTINGS_KEY }));
   return { success: true, siteSettings: settings };
 }

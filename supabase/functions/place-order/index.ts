@@ -26,6 +26,35 @@ function normalizeCountryCode(countryCode: string) {
   return `+${digits}`;
 }
 
+async function notifyCommerceSync(payload: Record<string, unknown>) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) return;
+
+    const response = await fetch(`${supabaseUrl}/realtime/v1/api/broadcast`, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messages: [{
+          topic: "commerce-sync",
+          event: "commerce-updated",
+          payload: { ...payload, savedAt: new Date().toISOString() },
+        }],
+      }),
+    });
+    if (!response.ok) {
+      console.error("Commerce realtime broadcast failed:", response.status, await response.text());
+    }
+  } catch (error) {
+    console.error("Commerce realtime broadcast error:", error);
+  }
+}
+
 async function sendOrderEmails(order: any, orderItems: any[]) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("RESEND_FROM_EMAIL") || "Kora Sutra <orders@korasutra.com>";
@@ -346,6 +375,14 @@ serve(async (req: Request): Promise<Response> => {
         total,
       },
     }, orderItems);
+
+    await notifyCommerceSync({
+      action: "order-created",
+      tables: ["orders", "order_items", "customers", "product_variants", "inventory_movements", "coupon_redemptions"],
+      orderId: order.id,
+      orderNumber: order.order_number,
+      customerId: customer?.id || customerSession.customer_id,
+    });
 
     return json({ order_id: order.id, order_number: order.order_number });
   } catch (error) {
