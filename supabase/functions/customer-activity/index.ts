@@ -45,7 +45,7 @@ serve(async (req: Request): Promise<Response> => {
   try {
     const body = await req.json();
     const activityType = String(body.activityType || body.activity_type || "");
-    if (!["just_visit", "product_added_to_cart", "checkout"].includes(activityType)) {
+    if (!["just_visit", "product_added_to_cart", "checkout", "cart_snapshot"].includes(activityType)) {
       return json({ error: "Invalid activity type" }, 400);
     }
 

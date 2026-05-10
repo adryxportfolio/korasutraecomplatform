@@ -468,6 +468,13 @@ export default function Collection() {
   const handleAddToCart = (product: ShopifyProduct) => {
     const variant = product.node.variants.edges[0]?.node;
     if (!variant) return;
+    if (!variant.availableForSale) {
+      toast.error('This item is out of stock', {
+        description: product.node.title,
+        position: 'top-center',
+      });
+      return;
+    }
 
     addItem({
       product,

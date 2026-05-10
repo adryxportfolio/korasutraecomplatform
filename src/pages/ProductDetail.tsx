@@ -476,6 +476,10 @@ export default function ProductDetail() {
     )?.node;
 
     if (!variant) return;
+    if (!variant.availableForSale) {
+      toast.error('This item is out of stock', { position: 'top-center' });
+      return;
+    }
 
     setIsCheckingOut(true);
     try {
@@ -507,6 +511,10 @@ export default function ProductDetail() {
     const variant = getCurrentVariant();
     if (!variant) {
       toast.error('Variant not found', { position: 'top-center' });
+      return;
+    }
+    if (!variant.availableForSale) {
+      toast.error('This item is out of stock', { position: 'top-center' });
       return;
     }
 

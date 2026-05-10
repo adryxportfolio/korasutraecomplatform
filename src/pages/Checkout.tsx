@@ -21,6 +21,7 @@ import {
   setCustomerSessionProfile,
   setCustomerSessionToken as persistCustomerSessionToken,
 } from "@/lib/customerSession";
+import { buildCartSnapshotActivityPayload, trackCustomerActivity } from "@/lib/customerActivity";
 import { supabase } from "@/integrations/supabase/client";
 import { subscribeToStorefrontRealtime } from "@/lib/realtimeTables";
 import { toast } from "sonner";
@@ -124,6 +125,18 @@ export default function Checkout() {
   useEffect(() => {
     setAppliedCoupon(null);
   }, [cartSignature]);
+
+  useEffect(() => {
+    if (!customerSessionToken || items.length === 0) return;
+    const payload = buildCartSnapshotActivityPayload(items);
+    trackCustomerActivity("checkout", {
+      sku: payload.sku,
+      metadata: {
+        ...payload.metadata,
+        source: "checkout-page",
+      },
+    });
+  }, [customerSessionToken, cartSignature, items]);
 
   useEffect(() => {
     const syncSession = () => {

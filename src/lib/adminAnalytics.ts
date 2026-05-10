@@ -43,6 +43,10 @@ export type SalesRange = {
   end?: string;
 };
 
+export function canUseLocalAdminMode(token: string | null | undefined, fallbackEnabled: boolean) {
+  return Boolean(fallbackEnabled && token?.startsWith("local-admin-"));
+}
+
 export function shouldUseLocalAdminFallback(params: { isLocalAdmin: boolean; hadRemoteError?: boolean; remoteProducts?: unknown[] }) {
   return params.isLocalAdmin || Boolean(params.hadRemoteError && (!params.remoteProducts || params.remoteProducts.length === 0));
 }
@@ -56,7 +60,7 @@ function isLiveOrder(order: AdminOrder) {
 }
 
 function isRevenueOrder(order: AdminOrder) {
-  return isLiveOrder(order) && order.payment_status === "paid";
+  return isLiveOrder(order) && (order.payment_status === "paid" || order.payment_method === "cod");
 }
 
 function isSameLocalDay(value: string, now: Date) {
@@ -107,6 +111,21 @@ function skuList(items: Array<{ sku?: string | null }> = []) {
   return items.map((item) => item.sku).filter(Boolean).join(", ");
 }
 
+function activitySkuList(activity: CustomerActivity | null) {
+  if (!activity) return "";
+  if (activity.sku) return activity.sku;
+  const skus = activity.metadata?.skus;
+  if (Array.isArray(skus)) return skus.filter(Boolean).join(", ");
+  const items = activity.metadata?.items;
+  if (Array.isArray(items)) {
+    return items
+      .map((item) => typeof item === "object" && item !== null ? "sku" in item ? item.sku : null : null)
+      .filter(Boolean)
+      .join(", ");
+  }
+  return String(activity.metadata?.sku || "");
+}
+
 export function customerActivityLabel(customer: AdminCustomer, orders: AdminOrder[] = [], activities: CustomerActivity[] = []) {
   const customerOrders = orders.filter((order) => order.customer_id === customer.id);
   const latestOrder = latestBy(customerOrders, orderTimestamp);
@@ -126,16 +145,32 @@ export function customerActivityLabel(customer: AdminCustomer, orders: AdminOrde
 
   if (latestActivity?.activity_type === "product_added_to_cart") {
     return {
-      type: "Product Added to Cart",
-      detail: latestActivity.sku ? `SKU: ${latestActivity.sku}` : String(latestActivity.metadata?.sku || ""),
+      type: "Abandoned Cart",
+      detail: activitySkuList(latestActivity) ? `SKU: ${activitySkuList(latestActivity)}` : "",
+      at: latestActivity.created_at || "",
+    };
+  }
+
+  if (latestActivity?.activity_type === "cart_snapshot") {
+    if (Number(latestActivity.metadata?.itemCount || 0) <= 0) {
+      return {
+        type: "Cart Cleared",
+        detail: "",
+        at: latestActivity.created_at || "",
+      };
+    }
+    return {
+      type: "Abandoned Cart",
+      detail: activitySkuList(latestActivity) ? `SKU: ${activitySkuList(latestActivity)}` : "",
       at: latestActivity.created_at || "",
     };
   }
 
   if (latestActivity?.activity_type === "checkout") {
+    const hasOrderMetadata = Boolean(latestActivity.metadata?.orderId || latestActivity.metadata?.orderNumber);
     return {
-      type: "Checkout",
-      detail: latestActivity.sku ? `SKU: ${latestActivity.sku}` : String(latestActivity.metadata?.sku || ""),
+      type: hasOrderMetadata ? "Checkout" : "Abandoned Cart",
+      detail: activitySkuList(latestActivity) ? `SKU: ${activitySkuList(latestActivity)}` : "",
       at: latestActivity.created_at || "",
     };
   }

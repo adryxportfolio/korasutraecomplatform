@@ -285,6 +285,25 @@ export default function OrderTracking() {
                   </div>
                 ) : null}
 
+                <div className="border border-border rounded-sm p-4 mb-6">
+                  <p className="font-heading text-lg mb-2">Delivery Details</p>
+                  <div className="grid sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Customer</p>
+                      <p className="font-medium">{order.ship_full_name}</p>
+                      <p className="font-mono text-xs">{order.ship_phone || order.contact_phone}</p>
+                      <p className="text-xs text-muted-foreground">{order.contact_email || ""}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Address</p>
+                      <p>{order.ship_address_line1}</p>
+                      {order.ship_address_line2 && <p>{order.ship_address_line2}</p>}
+                      <p>{order.ship_city}, {order.ship_state} {order.ship_postal_code}</p>
+                      <p>{order.ship_country || "India"}</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   {(order.order_items || []).map((item: any) => (
                     <div key={item.id} className="flex gap-3 border-b border-border last:border-0 pb-3 last:pb-0">

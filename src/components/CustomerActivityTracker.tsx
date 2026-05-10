@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { CUSTOMER_SESSION_CHANGED_EVENT } from "@/lib/customerSession";
-import { trackCustomerActivity } from "@/lib/customerActivity";
+import { buildCartSnapshotActivityPayload, trackCustomerActivity } from "@/lib/customerActivity";
 import { useCartStore, type CartItem } from "@/stores/cartStore";
 
 function itemSku(item: CartItem) {
@@ -11,15 +11,28 @@ export function CustomerActivityTracker() {
   const previousQuantities = useRef(new Map<string, number>());
 
   useEffect(() => {
+    const syncCartSnapshot = (items = useCartStore.getState().items, includeEmpty = false) => {
+      if (items.length > 0 || includeEmpty) {
+        trackCustomerActivity("cart_snapshot", buildCartSnapshotActivityPayload(items));
+      }
+    };
+
     trackCustomerActivity("just_visit");
-    const syncVisit = () => trackCustomerActivity("just_visit");
-    window.addEventListener(CUSTOMER_SESSION_CHANGED_EVENT, syncVisit);
+    syncCartSnapshot();
+    const syncSessionActivity = () => {
+      trackCustomerActivity("just_visit");
+      syncCartSnapshot();
+    };
+    window.addEventListener(CUSTOMER_SESSION_CHANGED_EVENT, syncSessionActivity);
 
     previousQuantities.current = new Map(useCartStore.getState().items.map((item) => [item.variantId, item.quantity]));
     const unsubscribe = useCartStore.subscribe((state) => {
       const previous = previousQuantities.current;
+      const nextQuantities = new Map(state.items.map((item) => [item.variantId, item.quantity]));
+      let cartChanged = previous.size !== nextQuantities.size;
       state.items.forEach((item) => {
         const oldQuantity = previous.get(item.variantId) || 0;
+        if (item.quantity !== oldQuantity) cartChanged = true;
         if (item.quantity > oldQuantity) {
           trackCustomerActivity("product_added_to_cart", {
             sku: itemSku(item),
@@ -32,11 +45,14 @@ export function CustomerActivityTracker() {
           });
         }
       });
-      previousQuantities.current = new Map(state.items.map((item) => [item.variantId, item.quantity]));
+      if (cartChanged) {
+        syncCartSnapshot(state.items, previous.size > 0);
+      }
+      previousQuantities.current = nextQuantities;
     });
 
     return () => {
-      window.removeEventListener(CUSTOMER_SESSION_CHANGED_EVENT, syncVisit);
+      window.removeEventListener(CUSTOMER_SESSION_CHANGED_EVENT, syncSessionActivity);
       unsubscribe();
     };
   }, []);

@@ -427,6 +427,18 @@ serve(async (req: Request): Promise<Response> => {
     const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
     if (itemsError) return json({ error: "Order was created but items could not be saved" }, 500);
 
+    const { data: inventoryUpdates, error: inventoryError } = await supabase.rpc("decrement_order_inventory", {
+      p_order_id: order.id,
+    });
+    if (inventoryError) {
+      await supabase.from("orders").delete().eq("id", order.id);
+      const message = String(inventoryError.message || "");
+      const isStockConflict = message.includes("OUT_OF_STOCK") || message.includes("VARIANT_NOT_FOUND") || message.includes("INVALID_QUANTITY");
+      return json({
+        error: isStockConflict ? "One or more cart items are no longer available" : "Unable to update inventory for this order",
+      }, isStockConflict ? 409 : 500);
+    }
+
     if (couponId) {
       const { error: redemptionError } = await supabase.from("coupon_redemptions").insert({
         coupon_id: couponId,
@@ -447,22 +459,6 @@ serve(async (req: Request): Promise<Response> => {
         skus: orderItems.map((item) => item.sku).filter(Boolean),
       },
     });
-
-    for (const item of items) {
-      const variant: any = variantById.get(item.variantId);
-      if (variant.track_inventory) {
-        await supabase
-          .from("product_variants")
-          .update({ inventory_qty: variant.inventory_qty - item.quantity })
-          .eq("id", item.variantId);
-      }
-      await supabase.from("inventory_movements").insert({
-        variant_id: item.variantId,
-        delta: -item.quantity,
-        reason: "purchase",
-        reference: order.id,
-      });
-    }
 
     const emailResults = await sendOrderEmailsWithResults({
       ...order,
@@ -487,6 +483,7 @@ serve(async (req: Request): Promise<Response> => {
       orderId: order.id,
       orderNumber: order.order_number,
       customerId: customer.id,
+      inventoryUpdates,
       emailResults,
     });
 

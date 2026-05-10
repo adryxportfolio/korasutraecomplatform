@@ -32,8 +32,12 @@ serve(async (req: Request): Promise<Response> => {
       .from("orders")
       .select(`
         customer_id,
+        contact_email,
         contact_phone,
+        ship_full_name,
         ship_phone,
+        ship_address_line1,
+        ship_address_line2,
         order_number,
         status,
         payment_method,
@@ -46,6 +50,7 @@ serve(async (req: Request): Promise<Response> => {
         ship_city,
         ship_state,
         ship_postal_code,
+        ship_country,
         tracking_number,
         tracking_url,
         carrier,
@@ -82,7 +87,7 @@ serve(async (req: Request): Promise<Response> => {
 
     if (!authorized) return json({ error: "Enter the verified phone number for this order" }, 401);
 
-    const { customer_id: _customerId, contact_phone: _contactPhone, ship_phone: _shipPhone, ...safeOrder } = order;
+    const { customer_id: _customerId, ...safeOrder } = order;
     return json({ order: safeOrder });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Internal server error" }, 500);

@@ -56,6 +56,7 @@ import {
   buildCustomerExportCsv,
   calculateAdminStats,
   calculateSalesSummary,
+  canUseLocalAdminMode,
   customerActivityLabel,
   shouldUseLocalAdminFallback,
 } from "@/lib/adminAnalytics";
@@ -70,6 +71,7 @@ import {
 } from "@/lib/siteSettings";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const LOCAL_ADMIN_FALLBACK_ENABLED = import.meta.env.VITE_ENABLE_LOCAL_ADMIN_FALLBACK === "true";
 
 type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "customers" | "coupons" | "sales" | "journals" | "settings";
 
@@ -118,7 +120,15 @@ function slugify(value: string) {
 }
 
 export default function Admin() {
-  const [adminToken, setAdminToken] = useState<string | null>(() => localStorage.getItem("ks_admin_token"));
+  const [adminToken, setAdminToken] = useState<string | null>(() => {
+    const storedToken = localStorage.getItem("ks_admin_token");
+    if (storedToken?.startsWith(LOCAL_ADMIN_TOKEN_PREFIX) && !LOCAL_ADMIN_FALLBACK_ENABLED) {
+      localStorage.removeItem("ks_admin_token");
+      localStorage.removeItem("ks_admin_user");
+      return null;
+    }
+    return storedToken;
+  });
   const [adminUsername, setAdminUsername] = useState(() => localStorage.getItem("ks_admin_user") || "Admin");
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -219,11 +229,11 @@ export default function Admin() {
   const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
   const resetCouponForm = () => setCouponForm({ id: "", code: "", description: "", status: "active", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscountCap: "", usageLimitTotal: "", usageLimitPerCustomer: "", firstOrderOnly: false, startAt: "", endAt: "", neverExpires: false, appliesTo: "all", includedProductIds: "", includedCategorySlugs: "", includedTags: "", excludedProductIds: "", excludedCategorySlugs: "", excludeSaleItems: false, canCombineWithCoupons: false, canCombineWithSalePrices: true, autoApply: false, displayOnWebsite: false, priority: "0", buyQuantity: "", getQuantity: "" });
   const resetJournalForm = () => setJournalForm({ id: "", title: "", slug: "", excerpt: "", content: "", imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", category: "Journal", author: "Kora Sutra", readTime: "3 min read", keywords: "", seoTitle: "", seoDescription: "", status: "draft", publishedAt: "" });
-  const isLocalAdmin = Boolean(adminToken?.startsWith(LOCAL_ADMIN_TOKEN_PREFIX));
+  const isLocalAdmin = canUseLocalAdminMode(adminToken, LOCAL_ADMIN_FALLBACK_ENABLED);
 
   const api = useCallback(async (options?: { method?: string; body?: Record<string, unknown> }) => {
     if (!adminToken) throw new Error("Missing admin token");
-    if (adminToken.startsWith(LOCAL_ADMIN_TOKEN_PREFIX)) {
+    if (isLocalAdmin) {
       const action = options?.body?.action;
       if (!action) return loadLocalAdminData();
       if (action === "upsert-product") {
@@ -264,7 +274,7 @@ export default function Admin() {
     const result = await response.json().catch(() => ({ error: "Admin service is unavailable" }));
     if (!response.ok || result.error) throw new Error(result.error || "Admin request failed");
     return result;
-  }, [adminToken]);
+  }, [adminToken, isLocalAdmin]);
 
   const broadcastSiteSettingsUpdate = useCallback(async (nextSettings: SiteSettings) => {
     if (isLocalAdmin) return;
@@ -385,7 +395,7 @@ export default function Admin() {
       setLoginPassword("");
       toast.success("Welcome to Kora Sutra Admin");
     } catch (error) {
-      if (await canUseLocalAdmin(loginUsername, loginPassword)) {
+      if (LOCAL_ADMIN_FALLBACK_ENABLED && await canUseLocalAdmin(loginUsername, loginPassword)) {
         const token = `${LOCAL_ADMIN_TOKEN_PREFIX}${crypto.randomUUID()}`;
         localStorage.setItem("ks_admin_token", token);
         localStorage.setItem("ks_admin_user", loginUsername.trim().toLowerCase());
@@ -1236,7 +1246,22 @@ export default function Admin() {
                       <div className="border-t border-border p-4 grid lg:grid-cols-[1fr_320px] gap-5">
                         <div className="space-y-3">
                           {(order.order_items || []).map((item: any) => <p key={item.id} className="text-sm">{item.quantity}x {item.product_title} <span className="text-muted-foreground">({item.sku})</span></p>)}
-                          <div className="text-sm text-muted-foreground">{order.ship_address_line1}, {order.ship_address_line2} {order.ship_city}, {order.ship_state} {order.ship_postal_code}</div>
+                          <div className="grid sm:grid-cols-2 gap-3 text-sm border-t border-border pt-3">
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">Customer</p>
+                              <p className="font-medium">{order.ship_full_name}</p>
+                              <p className="font-mono text-xs">{order.ship_phone || order.contact_phone}</p>
+                              <p className="text-xs">{order.contact_email || "-"}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">Shipping Address</p>
+                              <p>{order.ship_address_line1}</p>
+                              {order.ship_address_line2 && <p>{order.ship_address_line2}</p>}
+                              <p>{order.ship_city}, {order.ship_state} {order.ship_postal_code}</p>
+                              <p>{order.ship_country || "India"}</p>
+                            </div>
+                          </div>
+                          {order.notes && <div className="text-sm text-muted-foreground border-t border-border pt-3">{order.notes}</div>}
                         </div>
                         <div className="space-y-3">
                           <Select value={order.status} onValueChange={(value) => updateOrder(order, { status: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{orderStatuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent></Select>

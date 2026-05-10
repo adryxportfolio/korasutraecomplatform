@@ -74,8 +74,8 @@ describe("storefrontRealtimeTables", () => {
     const client = {
       channel: (name: string) => {
         const channel = {
-          on: (type: string, filter: { table?: string }) => {
-            if (type === "postgres_changes" && filter.table) postgresTables.push(filter.table);
+          on: (type: string, filter: { table?: string } | { event: string }, _callback?: unknown) => {
+            if (type === "postgres_changes" && "table" in filter && filter.table) postgresTables.push(filter.table);
             return channel;
           },
           subscribe: () => channel,
