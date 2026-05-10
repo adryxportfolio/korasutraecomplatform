@@ -10,6 +10,12 @@ const corsHeaders = {
 const DEFAULT_ADMIN_USERNAME = "korasutra.official@gmail.com";
 const LEGACY_ADMIN_USERNAME = "korasutra_admin";
 const DEFAULT_ADMIN_PASSWORD_HASH = "9d3bfeceeeab8f06130d094b83f2bd5f574dc495ab1c6927ad5f77ed8d0d3061";
+const PLACEHOLDER_PASSWORDS = new Set([
+  "replace_before_production",
+  "change_me",
+  "changeme",
+  "password",
+]);
 
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -26,8 +32,11 @@ function generateToken(): string {
 }
 
 async function getDefaultAdminPasswordHash(): Promise<string> {
-  const configuredPassword = Deno.env.get("ADMIN_DEFAULT_PASSWORD");
-  return configuredPassword ? await hashPassword(configuredPassword) : DEFAULT_ADMIN_PASSWORD_HASH;
+  const configuredPassword = Deno.env.get("ADMIN_DEFAULT_PASSWORD")?.trim();
+  if (!configuredPassword || PLACEHOLDER_PASSWORDS.has(configuredPassword.toLowerCase())) {
+    return DEFAULT_ADMIN_PASSWORD_HASH;
+  }
+  return await hashPassword(configuredPassword);
 }
 
 async function ensureDefaultAdmin(supabase: any, passwordHash: string) {

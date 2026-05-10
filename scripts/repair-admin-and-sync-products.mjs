@@ -7,6 +7,12 @@ const DEFAULT_ADMIN_USERNAME = "korasutra.official@gmail.com";
 const LEGACY_ADMIN_USERNAME = "korasutra_admin";
 const DEFAULT_ADMIN_PASSWORD_HASH = "9d3bfeceeeab8f06130d094b83f2bd5f574dc495ab1c6927ad5f77ed8d0d3061";
 const DEFAULT_CSV_PATH = "C:\\Users\\Admin\\Downloads\\products_export_1.csv";
+const PLACEHOLDER_PASSWORDS = new Set([
+  "replace_before_production",
+  "change_me",
+  "changeme",
+  "password",
+]);
 
 function parseEnv(text) {
   const env = {};
@@ -36,8 +42,9 @@ async function loadEnv() {
 
 async function ensureAdmin(supabase, env) {
   const username = (env.ADMIN_DEFAULT_USERNAME || DEFAULT_ADMIN_USERNAME).trim().toLowerCase();
-  const passwordHash = env.ADMIN_DEFAULT_PASSWORD
-    ? hashPassword(env.ADMIN_DEFAULT_PASSWORD)
+  const configuredPassword = env.ADMIN_DEFAULT_PASSWORD?.trim();
+  const passwordHash = configuredPassword && !PLACEHOLDER_PASSWORDS.has(configuredPassword.toLowerCase())
+    ? hashPassword(configuredPassword)
     : DEFAULT_ADMIN_PASSWORD_HASH;
 
   const { data: existingAdmins, error: selectError } = await supabase
