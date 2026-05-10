@@ -1,105 +1,63 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import heroPortrait from '@/assets/hero-kora-sutra-0750.jpg';
+import heroDesktop from '@/assets/hero-korasutra-desktop-1920.jpg';
+import heroLaptop from '@/assets/hero-korasutra-laptop-1600.jpg';
+import heroTablet from '@/assets/hero-korasutra-tablet-1200.jpg';
+import heroMobile from '@/assets/hero-korasutra-mobile-1080.jpg';
 import { defaultSiteSettings, type SiteSettings } from '@/lib/siteSettings';
 
 export function HeroSection({ settings = defaultSiteSettings }: { settings?: SiteSettings }) {
   const hero = settings.hero;
   const hasCustomDesktopImage = Boolean(hero.desktopImageUrl);
   const hasCustomMobileImage = Boolean(hero.mobileImageUrl);
-  const desktopImage = hero.desktopImageUrl || heroPortrait;
-  const mobileImage = hero.mobileImageUrl || heroPortrait;
-  const ctaHref = hero.ctaHref || defaultSiteSettings.hero.ctaHref;
-  const ctaText = hero.ctaText || defaultSiteSettings.hero.ctaText;
+  const desktopImage = hero.desktopImageUrl || heroDesktop;
+  const mobileImage = hero.mobileImageUrl || heroMobile;
+  const ctaHref = "/collections/all";
+  const ctaText = "Explore Our Collection";
   const altText = hero.altText || defaultSiteSettings.hero.altText;
 
   return (
-    <section className="relative w-full overflow-hidden">
-      {/* Desktop Hero */}
-      <div className="hidden md:block relative w-full">
-        <Link
-          to={ctaHref}
-          className={
-            hasCustomDesktopImage
-              ? "block relative w-full"
-              : "group relative flex w-full items-center justify-center overflow-hidden bg-[#e7e0d4] md:min-h-[620px] md:h-[min(88svh,860px)] lg:min-h-[680px] lg:h-[min(82svh,900px)]"
-          }
-        >
-          {hasCustomDesktopImage ? (
+    <section className="relative w-full overflow-hidden bg-[#e7e0d4]">
+      <Link to={ctaHref} className="group block relative w-full">
+        {hasCustomDesktopImage || hasCustomMobileImage ? (
+          <picture>
+            <source media="(min-width: 768px)" srcSet={desktopImage} />
             <img
-              src={desktopImage}
+              src={mobileImage}
               alt={altText}
-              className="w-full h-auto object-cover"
+              className="block w-full h-auto object-cover"
               loading="eager"
               decoding="async"
             />
-          ) : (
-            <>
-              <img
-                src={desktopImage}
-                alt=""
-                aria-hidden="true"
-                width={352}
-                height={470}
-                className="absolute inset-0 h-full w-full scale-110 object-cover object-center blur-2xl opacity-60 saturate-[0.9]"
-                loading="eager"
-                decoding="async"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-background/35 via-background/5 to-background/40" />
-              <div className="relative flex h-full w-full max-w-[1680px] items-center justify-center px-8 md:px-10 lg:justify-start lg:px-16">
-                <img
-                  src={desktopImage}
-                  alt={altText}
-                  width={352}
-                  height={470}
-                  className="h-[78%] max-h-[760px] w-auto rounded-sm object-contain shadow-[0_30px_90px_hsl(var(--foreground)/0.24)] ring-1 ring-background/45 transition-transform duration-700 group-hover:scale-[1.01] lg:h-[82%]"
-                  loading="eager"
-                  decoding="async"
-                />
-              </div>
-            </>
-          )}
-          {/* CTA overlay on right side matching the design */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.6 }}
-            className="absolute bottom-8 left-0 right-0 mx-auto w-fit lg:bottom-16 lg:left-auto lg:right-16 lg:mx-0"
-          >
-            <span className="inline-flex items-center justify-center px-10 py-4 bg-primary text-primary-foreground font-body text-sm tracking-widest uppercase rounded-sm hover:bg-primary/90 transition-colors shadow-lg">
-              {ctaText}
-            </span>
-          </motion.div>
-        </Link>
-      </div>
+          </picture>
+        ) : (
+          <picture>
+            <source media="(min-width: 1280px)" srcSet={heroDesktop} />
+            <source media="(min-width: 1024px)" srcSet={heroLaptop} />
+            <source media="(min-width: 768px)" srcSet={heroTablet} />
+            <img
+              src={heroMobile}
+              alt={altText}
+              width={1080}
+              height={1440}
+              className="block w-full h-auto object-cover"
+              loading="eager"
+              decoding="async"
+            />
+          </picture>
+        )}
 
-      {/* Mobile Hero */}
-      <div className="md:hidden relative w-full">
-        <Link
-          to={ctaHref}
-          className={hasCustomMobileImage ? "block relative w-full" : "block relative w-full aspect-[352/470] overflow-hidden bg-[#e7e0d4]"}
-        >
-          {hasCustomMobileImage ? (
-            <img
-              src={mobileImage}
-              alt={altText}
-              className="w-full h-auto object-cover"
-              loading="eager"
-              decoding="async"
-            />
-          ) : (
-            <img
-              src={mobileImage}
-              alt={altText}
-              width={352}
-              height={470}
-              className="h-full w-full object-cover object-center"
-              loading="eager"
-              decoding="async"
-            />
-          )}
-        </Link>
-      </div>
+        <div className="absolute inset-x-0 bottom-6 flex justify-center px-4 md:bottom-10 lg:bottom-14 lg:justify-end lg:px-16">
+          <motion.span
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.35 }}
+            className="inline-flex min-h-12 items-center justify-center rounded-sm bg-primary px-7 py-3 text-center font-body text-xs font-semibold uppercase tracking-widest text-primary-foreground shadow-[0_18px_45px_hsl(var(--foreground)/0.28)] ring-1 ring-background/40 transition-all duration-300 hover:bg-primary/90 group-hover:-translate-y-0.5 md:min-h-14 md:px-10 md:py-4 md:text-sm"
+          >
+            {ctaText}
+          </motion.span>
+        </div>
+      </Link>
     </section>
   );
 }
