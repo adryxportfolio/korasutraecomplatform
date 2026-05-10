@@ -134,7 +134,7 @@ describe("storefrontRealtimeTables", () => {
     expect(statuses).toContain("connected");
 
     unsubscribe();
-    expect(statuses.at(-1)).toBe("disconnected");
+    expect(statuses.at(-1)).toBe("connected");
   });
 
   test("keeps the dashboard status connected when postgres realtime is connected and broadcast closes", () => {
@@ -164,5 +164,6 @@ describe("storefrontRealtimeTables", () => {
     expect(statuses).toContain("connected");
     expect(statuses.at(-1)).toBe("connected");
     unsubscribe();
+    expect(statuses.at(-1)).toBe("connected");
   });
 });

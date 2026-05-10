@@ -66,6 +66,7 @@ type CommerceRealtimeOptions = {
 };
 
 function combinedRealtimeStatus(statuses: CommerceRealtimeStatus[]) {
+  if (!statuses.length) return "connecting";
   if (statuses.includes("connected")) return "connected";
   if (statuses.includes("connecting")) return "connecting";
   if (statuses.includes("reconnecting")) return "reconnecting";
@@ -139,7 +140,6 @@ export function subscribeToCommerceRealtime(
 
   return () => {
     if (refreshTimer) clearTimeout(refreshTimer);
-    options.onStatusChange?.("disconnected");
     if (postgresChannel) supabaseClient.removeChannel(postgresChannel);
     supabaseClient.removeChannel(broadcastChannel);
   };
