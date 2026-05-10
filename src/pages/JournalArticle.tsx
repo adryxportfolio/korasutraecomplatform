@@ -2,12 +2,27 @@ import { useParams, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
-import { journalArticles } from '@/data/journals';
+import { fetchPublishedJournals, type LiveJournalArticle } from '@/lib/journals';
+import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function JournalArticle() {
   const { slug } = useParams<{ slug: string }>();
+  const [journalArticles, setJournalArticles] = useState<LiveJournalArticle[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadJournals = async () => {
+      setJournalArticles(await fetchPublishedJournals());
+      setIsLoading(false);
+    };
+    loadJournals();
+    return subscribeToStorefrontRealtime(supabase, `journal-article-${slug || "unknown"}`, loadJournals, ["journal_articles"]);
+  }, [slug]);
+
   const article = journalArticles.find(a => a.slug === slug);
   const currentIndex = journalArticles.findIndex(a => a.slug === slug);
   const nextArticle = currentIndex >= 0 && currentIndex < journalArticles.length - 1
@@ -17,7 +32,7 @@ export default function JournalArticle() {
     ? journalArticles[currentIndex - 1]
     : null;
 
-  if (!article) {
+  if (!article && !isLoading) {
     return (
       <>
         <Navbar />
@@ -27,6 +42,16 @@ export default function JournalArticle() {
             <Link to="/journals" className="text-accent hover:underline">Back to Journals</Link>
           </div>
         </main>
+        <Footer />
+      </>
+    );
+  }
+
+  if (!article) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen pt-32 pb-16" />
         <Footer />
       </>
     );

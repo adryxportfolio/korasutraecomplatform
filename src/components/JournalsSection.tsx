@@ -1,9 +1,11 @@
 import { motion, useInView } from 'framer-motion';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
-import { journalArticles } from '@/data/journals';
 import { Button } from '@/components/ui/button';
+import { fetchPublishedJournals, type LiveJournalArticle } from '@/lib/journals';
+import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
+import { supabase } from '@/integrations/supabase/client';
 
 const INITIAL_COUNT = 3;
 
@@ -11,6 +13,13 @@ export function JournalsSection() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-50px' });
   const [showAll, setShowAll] = useState(false);
+  const [journalArticles, setJournalArticles] = useState<LiveJournalArticle[]>([]);
+
+  useEffect(() => {
+    const loadJournals = async () => setJournalArticles(await fetchPublishedJournals());
+    loadJournals();
+    return subscribeToStorefrontRealtime(supabase, "home-journals-sync", loadJournals, ["journal_articles"]);
+  }, []);
 
   const visibleArticles = showAll ? journalArticles : journalArticles.slice(0, INITIAL_COUNT);
 

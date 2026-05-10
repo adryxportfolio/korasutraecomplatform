@@ -4,6 +4,9 @@ import {
   BarChart3,
   Boxes,
   ChevronDown,
+  Download,
+  Edit3,
+  FileText,
   Image as ImageIcon,
   IndianRupee,
   LayoutDashboard,
@@ -50,6 +53,13 @@ import {
 import { CatalogTaxonomyGroup, catalogTaxonomy, selectionFromTags, tagsForCatalogSelection } from "@/lib/catalogTaxonomy";
 import { broadcastCommerceChange, subscribeToCommerceRealtime } from "@/lib/realtimeTables";
 import {
+  buildCustomerExportCsv,
+  calculateAdminStats,
+  calculateSalesSummary,
+  customerActivityLabel,
+  shouldUseLocalAdminFallback,
+} from "@/lib/adminAnalytics";
+import {
   SITE_SETTINGS_BROADCAST_EVENT,
   SITE_SETTINGS_REALTIME_CHANNEL,
   cacheSiteSettings,
@@ -61,7 +71,7 @@ import {
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
-type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "customers" | "coupons" | "sales" | "settings";
+type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "customers" | "coupons" | "sales" | "journals" | "settings";
 
 const navItems: Array<{ id: AdminSection; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -71,6 +81,7 @@ const navItems: Array<{ id: AdminSection; label: string; icon: typeof LayoutDash
   { id: "customers", label: "Customers", icon: Users },
   { id: "coupons", label: "Coupons", icon: Tags },
   { id: "sales", label: "Sales", icon: BarChart3 },
+  { id: "journals", label: "Journals", icon: FileText },
   { id: "settings", label: "Settings", icon: Shield },
 ];
 
@@ -100,14 +111,19 @@ export default function Admin() {
   const [loginPassword, setLoginPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [section, setSection] = useState<AdminSection>("dashboard");
-  const [data, setData] = useState<any>({ orders: [], products: [], customers: [], inventory: [], categories: [], coupons: [], siteSettings: defaultSiteSettings });
+  const [data, setData] = useState<any>({ orders: [], products: [], customers: [], customerActivities: [], inventory: [], categories: [], coupons: [], journals: [], siteSettings: defaultSiteSettings });
   const [isLoading, setIsLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [productTab, setProductTab] = useState("list");
   const [couponTab, setCouponTab] = useState("list");
+  const [journalTab, setJournalTab] = useState("list");
   const [isImporting, setIsImporting] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [salesRange, setSalesRange] = useState({
+    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    end: new Date().toISOString().slice(0, 10),
+  });
   const [siteSettingsForm, setSiteSettingsForm] = useState<SiteSettings>(defaultSiteSettings);
   const [heroDesktopFile, setHeroDesktopFile] = useState<{ dataUrl: string; fileName: string; contentType: string } | null>(null);
   const [heroMobileFile, setHeroMobileFile] = useState<{ dataUrl: string; fileName: string; contentType: string } | null>(null);
@@ -166,9 +182,29 @@ export default function Admin() {
     buyQuantity: "",
     getQuantity: "",
   });
+  const [journalForm, setJournalForm] = useState({
+    id: "",
+    title: "",
+    slug: "",
+    excerpt: "",
+    content: "",
+    imageUrl: "",
+    imageDataUrl: "",
+    imageFileName: "",
+    imageContentType: "",
+    category: "Journal",
+    author: "Kora Sutra",
+    readTime: "3 min read",
+    keywords: "",
+    seoTitle: "",
+    seoDescription: "",
+    status: "draft",
+    publishedAt: "",
+  });
 
   const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
   const resetCouponForm = () => setCouponForm({ id: "", code: "", description: "", status: "active", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscountCap: "", usageLimitTotal: "", usageLimitPerCustomer: "", firstOrderOnly: false, startAt: "", endAt: "", neverExpires: false, appliesTo: "all", includedProductIds: "", includedCategorySlugs: "", includedTags: "", excludedProductIds: "", excludedCategorySlugs: "", excludeSaleItems: false, canCombineWithCoupons: false, canCombineWithSalePrices: true, autoApply: false, displayOnWebsite: false, priority: "0", buyQuantity: "", getQuantity: "" });
+  const resetJournalForm = () => setJournalForm({ id: "", title: "", slug: "", excerpt: "", content: "", imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", category: "Journal", author: "Kora Sutra", readTime: "3 min read", keywords: "", seoTitle: "", seoDescription: "", status: "draft", publishedAt: "" });
   const isLocalAdmin = Boolean(adminToken?.startsWith(LOCAL_ADMIN_TOKEN_PREFIX));
 
   const api = useCallback(async (options?: { method?: string; body?: Record<string, unknown> }) => {
@@ -197,6 +233,8 @@ export default function Admin() {
       if (action === "upsert-site-settings") {
         return saveLocalSiteSettings(normalizeSiteSettings(options.body?.settings as any));
       }
+      if (action === "upsert-journal") return { success: true, journalId: `local-journal-${Date.now()}` };
+      if (action === "delete-journal") return { success: true };
       if (action === "update-order") return { success: true };
       throw new Error("Unsupported local admin action");
     }
@@ -249,7 +287,7 @@ export default function Admin() {
     setIsLoading(true);
     try {
       let result = await api();
-      if (!isLocalAdmin && Array.isArray(result.products) && result.products.length === 0) {
+      if (shouldUseLocalAdminFallback({ isLocalAdmin, hadRemoteError: false, remoteProducts: result.products })) {
         result = await loadLocalAdminData();
       }
       const normalizedSiteSettings = normalizeSiteSettings(
@@ -259,7 +297,18 @@ export default function Admin() {
             ? siteSettingsToRow(result.siteSettings)
             : result.site_settings || result.siteSettingsRow || null,
       );
-      setData({ ...result, siteSettings: normalizedSiteSettings });
+      setData({
+        ...result,
+        orders: result.orders || [],
+        products: result.products || [],
+        customers: result.customers || [],
+        customerActivities: result.customerActivities || [],
+        inventory: result.inventory || [],
+        categories: result.categories || [],
+        coupons: result.coupons || [],
+        journals: result.journals || [],
+        siteSettings: normalizedSiteSettings,
+      });
       setSiteSettingsForm(normalizedSiteSettings);
       if (result.admin?.username) {
         setAdminUsername(result.admin.username);
@@ -336,18 +385,11 @@ export default function Admin() {
     localStorage.removeItem("ks_admin_token");
     localStorage.removeItem("ks_admin_user");
     setAdminToken(null);
-    setData({ orders: [], products: [], customers: [], inventory: [], categories: [], coupons: [], siteSettings: defaultSiteSettings });
+    setData({ orders: [], products: [], customers: [], customerActivities: [], inventory: [], categories: [], coupons: [], journals: [], siteSettings: defaultSiteSettings });
   };
 
-  const stats = useMemo(() => {
-    const today = new Date().toDateString();
-    const ordersToday = data.orders.filter((order: any) => new Date(order.created_at).toDateString() === today);
-    const revenueToday = ordersToday.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
-    const pendingFulfilment = data.orders.filter((order: any) => ["confirmed", "processing"].includes(order.status)).length;
-    const lowStock = data.inventory.filter((variant: any) => Number(variant.inventory_qty) <= 2).length;
-    const lifetimeRevenue = data.orders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
-    return { ordersToday: ordersToday.length, revenueToday, pendingFulfilment, lowStock, lifetimeRevenue };
-  }, [data.orders, data.inventory]);
+  const stats = useMemo(() => calculateAdminStats(data), [data]);
+  const salesSummary = useMemo(() => calculateSalesSummary(data.orders, salesRange), [data.orders, salesRange]);
 
   const filteredProducts = data.products.filter((product: any) => {
     const q = query.toLowerCase();
@@ -361,6 +403,10 @@ export default function Admin() {
   const filteredCoupons = (data.coupons || []).filter((coupon: any) => {
     const q = query.toLowerCase();
     return !q || coupon.code?.toLowerCase().includes(q) || coupon.description?.toLowerCase().includes(q);
+  });
+  const filteredJournals = (data.journals || []).filter((journal: any) => {
+    const q = query.toLowerCase();
+    return !q || journal.title?.toLowerCase().includes(q) || journal.slug?.toLowerCase().includes(q) || journal.category?.toLowerCase().includes(q);
   });
   const categoryOptions = data.categories.length ? data.categories : [
     { slug: "sarees", name: "Sarees" },
@@ -512,6 +558,20 @@ export default function Admin() {
     reader.readAsDataURL(file);
   };
 
+  const selectJournalImage = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setJournalForm({
+        ...journalForm,
+        imageDataUrl: String(reader.result || ""),
+        imageFileName: file.name,
+        imageContentType: file.type || "image/jpeg",
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const uploadSiteImage = async (file: { dataUrl: string; fileName: string; contentType: string } | null, fallbackUrl: string) => {
     if (!file) return fallbackUrl;
     if (isLocalAdmin) return file.dataUrl;
@@ -533,6 +593,29 @@ export default function Admin() {
     const result = await response.json().catch(() => ({ error: "Hero image upload failed" }));
     if (!response.ok || result.error) throw new Error(result.error || "Hero image upload failed");
     return result.url || fallbackUrl;
+  };
+
+  const uploadJournalImage = async () => {
+    if (!journalForm.imageDataUrl) return journalForm.imageUrl;
+    if (isLocalAdmin) return journalForm.imageDataUrl;
+    if (!adminToken) throw new Error("Missing admin token");
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-upload-image`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({
+        dataUrl: journalForm.imageDataUrl,
+        fileName: journalForm.imageFileName,
+        contentType: journalForm.imageContentType,
+        productHandle: `journal-${journalForm.slug || slugify(journalForm.title)}`,
+      }),
+    });
+    const result = await response.json().catch(() => ({ error: "Journal image upload failed" }));
+    if (!response.ok || result.error) throw new Error(result.error || "Journal image upload failed");
+    return result.url || journalForm.imageUrl;
   };
 
   const updateNavLink = (index: number, updates: Partial<{ label: string; href: string; enabled: boolean }>) => {
@@ -771,6 +854,78 @@ export default function Admin() {
     }
   };
 
+  const saveJournal = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const imageUrl = await uploadJournalImage();
+      const result = await api({
+        method: "POST",
+        body: {
+          action: "upsert-journal",
+          journal: {
+            ...journalForm,
+            slug: journalForm.slug || slugify(journalForm.title),
+            imageUrl,
+            keywords: splitList(journalForm.keywords),
+          },
+        },
+      });
+      await broadcastCommerceChange(supabase, { action: "journal-updated", table: "journal_articles", savedAt: new Date().toISOString() });
+      toast.success(journalForm.status === "published" ? "Journal published live" : "Journal saved as draft");
+      resetJournalForm();
+      setJournalTab("list");
+      fetchAdminData();
+      return result;
+    } catch (error) {
+      toast.error("Unable to save journal", { description: error instanceof Error ? error.message : undefined });
+    }
+  };
+
+  const editJournal = (journal: any) => {
+    setJournalForm({
+      id: journal.id || "",
+      title: journal.title || "",
+      slug: journal.slug || "",
+      excerpt: journal.excerpt || "",
+      content: journal.content || "",
+      imageUrl: journal.image_url || journal.image || "",
+      imageDataUrl: "",
+      imageFileName: "",
+      imageContentType: "",
+      category: journal.category || "Journal",
+      author: journal.author || "Kora Sutra",
+      readTime: journal.read_time || journal.readTime || "3 min read",
+      keywords: (journal.keywords || []).join(", "),
+      seoTitle: journal.seo_title || "",
+      seoDescription: journal.seo_description || "",
+      status: journal.status || "draft",
+      publishedAt: journal.published_at ? String(journal.published_at).slice(0, 16) : "",
+    });
+    setJournalTab("edit");
+  };
+
+  const deleteJournal = async (journal: any) => {
+    try {
+      await api({ method: "POST", body: { action: "delete-journal", journalId: journal.id } });
+      await broadcastCommerceChange(supabase, { action: "journal-deleted", table: "journal_articles", savedAt: new Date().toISOString() });
+      toast.success("Journal deleted");
+      fetchAdminData();
+    } catch (error) {
+      toast.error("Unable to delete journal", { description: error instanceof Error ? error.message : undefined });
+    }
+  };
+
+  const exportCustomers = () => {
+    const csv = buildCustomerExportCsv(data.customers, data.orders, data.customerActivities);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `korasutra-customers-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!adminToken) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -881,12 +1036,12 @@ export default function Admin() {
                 </Panel>
                 <Panel title="New Orders">
                   <div className="space-y-3">
-                    {data.orders.slice(0, 6).map((order: any) => (
+                    {data.orders.length ? data.orders.slice(0, 6).map((order: any) => (
                       <div key={order.id} className="flex justify-between gap-3 text-sm">
                         <span className="font-heading">{order.order_number}</span>
                         <span className="font-price">{formatPrice(String(order.total), "INR")}</span>
                       </div>
-                    ))}
+                    )) : <p className="text-sm text-muted-foreground">No orders yet. New checkout orders appear here live.</p>}
                   </div>
                 </Panel>
               </div>
@@ -1076,10 +1231,28 @@ export default function Admin() {
 
           {section === "customers" && (
             <Panel title={`Customers (${data.customers.length})`}>
+              <div className="flex justify-end mb-3">
+                <Button type="button" variant="outline" size="sm" onClick={exportCustomers}>
+                  <Download className="w-4 h-4 mr-2" />Export Customer Data
+                </Button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead><tr className="text-left border-b border-border"><th className="py-2">Name</th><th>Phone</th><th>Email</th><th>Verified</th><th>Last Activity</th></tr></thead>
-                  <tbody>{data.customers.map((customer: any) => <tr key={customer.id} className="border-b border-border last:border-0"><td className="py-3">{customer.name || "Customer"}</td><td className="font-mono">{customer.country_code} {customer.phone}</td><td>{customer.email || "-"}</td><td>{customer.is_verified ? "Yes" : "No"}</td><td>{new Date(customer.updated_at).toLocaleDateString("en-IN")}</td></tr>)}</tbody>
+                  <thead><tr className="text-left border-b border-border"><th className="py-2">Name</th><th>Phone</th><th>Email</th><th>OTP Verified</th><th>Last Activity</th><th>Details</th><th>When</th></tr></thead>
+                  <tbody>{data.customers.map((customer: any) => {
+                    const activity = customerActivityLabel(customer, data.orders, data.customerActivities);
+                    return (
+                      <tr key={customer.id} className="border-b border-border last:border-0">
+                        <td className="py-3">{customer.name || "Customer"}</td>
+                        <td className="font-mono">{customer.country_code} {customer.phone}</td>
+                        <td>{customer.email || "-"}</td>
+                        <td>{customer.is_verified ? <Badge className="bg-green-100 text-green-800 border-green-200">Yes</Badge> : <Badge variant="outline">No</Badge>}</td>
+                        <td>{activity.type}</td>
+                        <td className="font-mono text-xs">{activity.detail || "-"}</td>
+                        <td>{activity.at ? new Date(activity.at).toLocaleString("en-IN") : "-"}</td>
+                      </tr>
+                    );
+                  })}</tbody>
                 </table>
               </div>
             </Panel>
@@ -1174,11 +1347,102 @@ export default function Admin() {
           )}
 
           {section === "sales" && (
-            <div className="grid md:grid-cols-3 gap-4">
-              <StatCard icon={IndianRupee} label="Lifetime Revenue" value={formatPrice(String(stats.lifetimeRevenue), "INR")} />
-              <StatCard icon={ShoppingBag} label="Total Orders" value={data.orders.length} />
-              <StatCard icon={BarChart3} label="AOV" value={formatPrice(String(data.orders.length ? stats.lifetimeRevenue / data.orders.length : 0), "INR")} />
+            <div className="space-y-4">
+              <Panel title="Sales Filters">
+                <div className="grid sm:grid-cols-[1fr_1fr_auto] gap-3 items-end max-w-2xl">
+                  <Field label="From"><Input type="date" value={salesRange.start} onChange={(event) => setSalesRange({ ...salesRange, start: event.target.value })} /></Field>
+                  <Field label="To"><Input type="date" value={salesRange.end} onChange={(event) => setSalesRange({ ...salesRange, end: event.target.value })} /></Field>
+                  <Button type="button" variant="outline" onClick={() => setSalesRange({ start: "", end: "" })}>All Time</Button>
+                </div>
+              </Panel>
+              <div className="grid md:grid-cols-3 xl:grid-cols-5 gap-4">
+                <StatCard icon={IndianRupee} label="Range Revenue" value={formatPrice(String(salesSummary.revenue), "INR")} />
+                <StatCard icon={ShoppingBag} label="Range Orders" value={salesSummary.orders} />
+                <StatCard icon={BarChart3} label="AOV" value={formatPrice(String(salesSummary.averageOrderValue), "INR")} />
+                <StatCard icon={IndianRupee} label="Lifetime Revenue" value={formatPrice(String(stats.lifetimeRevenue), "INR")} />
+                <StatCard icon={Truck} label="COD Orders" value={salesSummary.codOrders} />
+              </div>
+              <Panel title="Real Sales">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="text-left border-b border-border"><th className="py-2">Order</th><th>Date</th><th>Customer</th><th>Payment</th><th>Status</th><th>Total</th></tr></thead>
+                    <tbody>{data.orders.filter((order: any) => calculateSalesSummary([order], salesRange).orders > 0).map((order: any) => (
+                      <tr key={order.id} className="border-b border-border last:border-0">
+                        <td className="font-heading py-3">{order.order_number}</td>
+                        <td>{new Date(order.placed_at || order.created_at).toLocaleDateString("en-IN")}</td>
+                        <td>{order.ship_full_name}</td>
+                        <td>{order.payment_method} / {order.payment_status}</td>
+                        <td><Badge className={statusBadge(order.status)}>{order.status}</Badge></td>
+                        <td className="font-price">{formatPrice(String(order.total), "INR")}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </Panel>
             </div>
+          )}
+
+          {section === "journals" && (
+            <Tabs value={journalTab} onValueChange={setJournalTab} className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="list">Journals</TabsTrigger>
+                <TabsTrigger value="edit"><Edit3 className="w-4 h-4 mr-2" />Add / Edit</TabsTrigger>
+              </TabsList>
+              <TabsContent value="list">
+                <Panel title={`Journals (${filteredJournals.length})`}>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead><tr className="text-left border-b border-border"><th className="py-2">Article</th><th>Category</th><th>Status</th><th>Published</th><th></th></tr></thead>
+                      <tbody>{filteredJournals.map((journal: any) => (
+                        <tr key={journal.id || journal.slug} className="border-b border-border last:border-0">
+                          <td className="py-3">
+                            <p className="font-heading">{journal.title}</p>
+                            <p className="text-xs text-muted-foreground">/journals/{journal.slug}</p>
+                          </td>
+                          <td>{journal.category || "Journal"}</td>
+                          <td><Badge className={statusBadge(journal.status)}>{journal.status}</Badge></td>
+                          <td>{journal.published_at ? new Date(journal.published_at).toLocaleDateString("en-IN") : "-"}</td>
+                          <td className="flex gap-2 justify-end py-2">
+                            <Button size="sm" variant="outline" onClick={() => editJournal(journal)}>Edit</Button>
+                            <Button size="sm" variant="outline" onClick={() => deleteJournal(journal)} aria-label={`Delete ${journal.title}`}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </Panel>
+              </TabsContent>
+              <TabsContent value="edit">
+                <Panel title="Journal Studio">
+                  <form onSubmit={saveJournal} className="grid md:grid-cols-2 gap-4">
+                    <Field label="Title"><Input value={journalForm.title} onChange={(e) => setJournalForm({ ...journalForm, title: e.target.value, slug: journalForm.slug || slugify(e.target.value) })} required /></Field>
+                    <Field label="Slug"><Input value={journalForm.slug} onChange={(e) => setJournalForm({ ...journalForm, slug: slugify(e.target.value) })} required /></Field>
+                    <Field label="Category"><Input value={journalForm.category} onChange={(e) => setJournalForm({ ...journalForm, category: e.target.value })} /></Field>
+                    <Field label="Status"><Select value={journalForm.status} onValueChange={(value) => setJournalForm({ ...journalForm, status: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="published">Published</SelectItem></SelectContent></Select></Field>
+                    <Field label="Author"><Input value={journalForm.author} onChange={(e) => setJournalForm({ ...journalForm, author: e.target.value })} /></Field>
+                    <Field label="Read Time"><Input value={journalForm.readTime} onChange={(e) => setJournalForm({ ...journalForm, readTime: e.target.value })} /></Field>
+                    <Field label="Hero Image"><Input type="file" accept="image/*" onChange={(event) => selectJournalImage(event.target.files?.[0] || null)} /></Field>
+                    <Field label="Hero Image URL"><Input value={journalForm.imageUrl} onChange={(e) => setJournalForm({ ...journalForm, imageUrl: e.target.value })} /></Field>
+                    {(journalForm.imageDataUrl || journalForm.imageUrl) && (
+                      <div className="md:col-span-2 border border-border rounded-sm p-3 max-w-md">
+                        <img src={journalForm.imageDataUrl || journalForm.imageUrl} alt="Journal preview" className="w-full aspect-[16/9] object-cover rounded-sm" />
+                      </div>
+                    )}
+                    <Field label="Excerpt" className="md:col-span-2"><Textarea value={journalForm.excerpt} onChange={(e) => setJournalForm({ ...journalForm, excerpt: e.target.value })} rows={3} required /></Field>
+                    <Field label="Content" className="md:col-span-2"><Textarea value={journalForm.content} onChange={(e) => setJournalForm({ ...journalForm, content: e.target.value })} rows={12} required placeholder="Write the article. Separate paragraphs with blank lines." /></Field>
+                    <Field label="Keywords / Tags" className="md:col-span-2"><Input value={journalForm.keywords} onChange={(e) => setJournalForm({ ...journalForm, keywords: e.target.value })} placeholder="handloom, tussar, saree care" /></Field>
+                    <Field label="SEO Title"><Input value={journalForm.seoTitle} onChange={(e) => setJournalForm({ ...journalForm, seoTitle: e.target.value })} /></Field>
+                    <Field label="SEO Description"><Input value={journalForm.seoDescription} onChange={(e) => setJournalForm({ ...journalForm, seoDescription: e.target.value })} /></Field>
+                    <div className="md:col-span-2 flex gap-2">
+                      <Button type="submit"><Save className="w-4 h-4 mr-2" />Save Journal</Button>
+                      <Button type="button" variant="outline" onClick={resetJournalForm}>Clear</Button>
+                    </div>
+                  </form>
+                </Panel>
+              </TabsContent>
+            </Tabs>
           )}
 
           {section === "settings" && (

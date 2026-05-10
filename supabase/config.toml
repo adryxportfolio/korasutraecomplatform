@@ -30,6 +30,9 @@ verify_jwt = false
 [functions.coupon-validate]
 verify_jwt = false
 
+[functions.customer-activity]
+verify_jwt = false
+
 [functions.track-order]
 verify_jwt = false
 

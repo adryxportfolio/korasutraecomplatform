@@ -1,11 +1,22 @@
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
-import { journalArticles } from '@/data/journals';
+import { fetchPublishedJournals, type LiveJournalArticle } from '@/lib/journals';
+import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Journals() {
+  const [journalArticles, setJournalArticles] = useState<LiveJournalArticle[]>([]);
+
+  useEffect(() => {
+    const loadJournals = async () => setJournalArticles(await fetchPublishedJournals());
+    loadJournals();
+    return subscribeToStorefrontRealtime(supabase, "journals-page-sync", loadJournals, ["journal_articles"]);
+  }, []);
+
   return (
     <>
       <Helmet>

@@ -19,9 +19,11 @@ describe("storefrontRealtimeTables", () => {
       "orders",
       "order_items",
       "customers",
+      "customer_activities",
       "customer_addresses",
       "inventory_movements",
       "site_settings",
+      "journal_articles",
     ]);
   });
 

@@ -25,6 +25,7 @@ import Admin from "./pages/Admin";
 import Journals from "./pages/Journals";
 import JournalArticle from "./pages/JournalArticle";
 import Checkout from "./pages/Checkout";
+import { CustomerActivityTracker } from "./components/CustomerActivityTracker";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <ScrollToTop />
+          <CustomerActivityTracker />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/products/:handle" element={<ProductDetail />} />

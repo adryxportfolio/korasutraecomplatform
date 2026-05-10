@@ -9,9 +9,11 @@ export const storefrontRealtimeTables = [
   "orders",
   "order_items",
   "customers",
+  "customer_activities",
   "customer_addresses",
   "inventory_movements",
   "site_settings",
+  "journal_articles",
 ] as const;
 
 export const COMMERCE_REALTIME_CHANNEL = "commerce-sync";
@@ -26,6 +28,7 @@ export type CommerceRealtimePayload = {
   customerId?: string;
   productId?: string;
   couponId?: string;
+  journalId?: string;
   savedAt?: string;
 };
 
@@ -44,8 +47,13 @@ type RealtimeClient = {
   removeChannel: (channel: RealtimeChannel) => unknown;
 };
 
-export function subscribeToStorefrontRealtime(supabaseClient: RealtimeClient, channelName: string, onChange: () => void) {
-  return subscribeToCommerceRealtime(supabaseClient, channelName, onChange);
+export function subscribeToStorefrontRealtime(
+  supabaseClient: RealtimeClient,
+  channelName: string,
+  onChange: () => void,
+  tables: readonly string[] = storefrontRealtimeTables,
+) {
+  return subscribeToCommerceRealtime(supabaseClient, channelName, onChange, tables);
 }
 
 export function subscribeToCommerceRealtime(

@@ -343,6 +343,17 @@ serve(async (req: Request): Promise<Response> => {
       if (!redemptionError) await supabase.rpc("increment_coupon_usage", { coupon_id_input: couponId });
     }
 
+    await supabase.from("customer_activities").insert({
+      customer_id: customer?.id || customerSession.customer_id,
+      activity_type: "checkout",
+      sku: orderItems.map((item) => item.sku).filter(Boolean).join(", ") || null,
+      metadata: {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        skus: orderItems.map((item) => item.sku).filter(Boolean),
+      },
+    });
+
     for (const item of items) {
       const variant: any = variantById.get(item.variantId);
       if (variant.track_inventory) {

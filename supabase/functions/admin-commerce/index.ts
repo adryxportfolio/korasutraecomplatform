@@ -169,6 +169,10 @@ async function saveProduct(supabase: any, product: any) {
       ? [product.variant]
       : [];
 
+  if (variants.length) {
+    await supabase.from("product_variants").delete().eq("product_id", saved.id);
+  }
+
   for (const variant of variants) {
     const sku = variant.sku || `${product.handle}-${variant.title || "default"}`.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     await supabase.from("product_variants").upsert({
@@ -188,6 +192,11 @@ async function saveProduct(supabase: any, product: any) {
   }
 
   return saved.id;
+}
+
+function optionalText(value: unknown) {
+  const text = String(value || "").trim();
+  return text ? text : null;
 }
 
 function normalizeCouponCode(code: string) {
@@ -259,6 +268,38 @@ async function saveSiteSettings(supabase: any, settings: any) {
     .single();
   if (error || !data) throw new Error("Unable to save website content");
   return data;
+}
+
+async function saveJournal(supabase: any, journal: any) {
+  const slug = String(journal.slug || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const title = String(journal.title || "").trim();
+  if (!slug || !title) throw new Error("Journal title and slug are required");
+
+  const status = journal.status === "published" ? "published" : "draft";
+  const payload = {
+    slug,
+    title,
+    excerpt: String(journal.excerpt || "").trim(),
+    content: String(journal.content || "").trim(),
+    image_url: optionalText(journal.imageUrl || journal.image_url),
+    category: String(journal.category || "Journal").trim() || "Journal",
+    author: String(journal.author || "Kora Sutra").trim() || "Kora Sutra",
+    read_time: String(journal.readTime || journal.read_time || "3 min read").trim() || "3 min read",
+    keywords: Array.isArray(journal.keywords) ? journal.keywords : [],
+    seo_title: optionalText(journal.seoTitle || journal.seo_title),
+    seo_description: optionalText(journal.seoDescription || journal.seo_description),
+    status,
+    published_at: status === "published"
+      ? journal.publishedAt || journal.published_at || new Date().toISOString()
+      : null,
+  };
+
+  const query = journal.id
+    ? supabase.from("journal_articles").update(payload).eq("id", journal.id)
+    : supabase.from("journal_articles").upsert(payload, { onConflict: "slug" });
+  const { data, error } = await query.select("id").single();
+  if (error || !data) throw new Error("Unable to save journal");
+  return data.id;
 }
 
 serve(async (req: Request): Promise<Response> => {
@@ -406,20 +447,35 @@ serve(async (req: Request): Promise<Response> => {
         return json({ success: true, siteSettings });
       }
 
+      if (body.action === "upsert-journal") {
+        const journalId = await saveJournal(supabase, body.journal || {});
+        await notifyCommerceSync({ action: "journal-updated", table: "journal_articles", journalId });
+        return json({ success: true, journalId });
+      }
+
+      if (body.action === "delete-journal") {
+        const { error } = await supabase.from("journal_articles").delete().eq("id", body.journalId);
+        if (error) return json({ error: "Unable to delete journal" }, 500);
+        await notifyCommerceSync({ action: "journal-deleted", table: "journal_articles", journalId: body.journalId });
+        return json({ success: true });
+      }
+
       return json({ error: "Unknown action" }, 400);
     }
 
-    const [ordersRes, productsRes, customersRes, inventoryRes, categoriesRes, couponsRes, siteSettingsRes] = await Promise.all([
+    const [ordersRes, productsRes, customersRes, activitiesRes, inventoryRes, categoriesRes, couponsRes, journalsRes, siteSettingsRes] = await Promise.all([
       supabase.from("orders").select("*, order_items(*)").order("created_at", { ascending: false }).limit(100),
       supabase.from("products").select("*, category:categories(slug, name), product_images(*), product_videos(*), product_variants(*)").order("updated_at", { ascending: false }).limit(200),
       supabase.from("customers").select("id, phone, country_code, name, email, is_verified, created_at, updated_at").order("updated_at", { ascending: false }).limit(200),
+      supabase.from("customer_activities").select("*").order("created_at", { ascending: false }).limit(1000),
       supabase.from("product_variants").select("*, product:products(title, handle)").order("updated_at", { ascending: false }).limit(300),
       supabase.from("categories").select("*").order("sort_order", { ascending: true }),
       supabase.from("coupons").select("*, coupon_redemptions(id, discount_amount, created_at)").order("priority", { ascending: false }).order("created_at", { ascending: false }).limit(200),
+      supabase.from("journal_articles").select("*").order("published_at", { ascending: false }).order("created_at", { ascending: false }).limit(200),
       supabase.from("site_settings").select("hero, navbar, promo_popup").eq("id", "global").maybeSingle(),
     ]);
 
-    if (ordersRes.error || productsRes.error || customersRes.error || inventoryRes.error || categoriesRes.error || couponsRes.error || siteSettingsRes.error) {
+    if (ordersRes.error || productsRes.error || customersRes.error || activitiesRes.error || inventoryRes.error || categoriesRes.error || couponsRes.error || journalsRes.error || siteSettingsRes.error) {
       return json({ error: "Unable to fetch admin data" }, 500);
     }
 
@@ -428,9 +484,11 @@ serve(async (req: Request): Promise<Response> => {
       orders: ordersRes.data || [],
       products: productsRes.data || [],
       customers: customersRes.data || [],
+      customerActivities: activitiesRes.data || [],
       inventory: inventoryRes.data || [],
       categories: categoriesRes.data || [],
       coupons: couponsRes.data || [],
+      journals: journalsRes.data || [],
       siteSettings: siteSettingsRes.data || null,
     });
   } catch (error) {
