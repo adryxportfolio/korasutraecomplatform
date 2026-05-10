@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  browserPostgresRealtimeTables,
   COMMERCE_BROADCAST_EVENT,
   COMMERCE_REALTIME_CHANNEL,
   storefrontRealtimeTables,
@@ -32,6 +33,19 @@ describe("storefrontRealtimeTables", () => {
     expect(COMMERCE_BROADCAST_EVENT).toBe("commerce-updated");
   });
 
+  test("keeps browser postgres subscriptions limited to public storefront tables", () => {
+    expect(browserPostgresRealtimeTables).toEqual([
+      "categories",
+      "products",
+      "product_images",
+      "product_videos",
+      "product_variants",
+      "coupons",
+      "site_settings",
+      "journal_articles",
+    ]);
+  });
+
   test("subscribes to the shared broadcast topic regardless of page channel name", () => {
     const channelNames: string[] = [];
     const removedChannels: unknown[] = [];
@@ -50,8 +64,33 @@ describe("storefrontRealtimeTables", () => {
     const unsubscribe = subscribeToCommerceRealtime(client, "admin-commerce-sync", () => undefined, ["orders"]);
     unsubscribe();
 
-    expect(channelNames).toEqual(["admin-commerce-sync", COMMERCE_REALTIME_CHANNEL]);
-    expect(removedChannels).toHaveLength(2);
+    expect(channelNames).toEqual([COMMERCE_REALTIME_CHANNEL]);
+    expect(removedChannels).toHaveLength(1);
+  });
+
+  test("subscribes to direct postgres changes only for browser-safe tables", () => {
+    const postgresTables: string[] = [];
+    const channelNames: string[] = [];
+    const client = {
+      channel: (name: string) => {
+        const channel = {
+          on: (type: string, filter: { table?: string }) => {
+            if (type === "postgres_changes" && filter.table) postgresTables.push(filter.table);
+            return channel;
+          },
+          subscribe: () => channel,
+        };
+        channelNames.push(name);
+        return channel;
+      },
+      removeChannel: () => undefined,
+    };
+
+    const unsubscribe = subscribeToCommerceRealtime(client, "mixed-sync", () => undefined, ["orders", "customers", "products", "journal_articles"]);
+    unsubscribe();
+
+    expect(channelNames).toEqual(["mixed-sync", COMMERCE_REALTIME_CHANNEL]);
+    expect(postgresTables).toEqual(["products", "journal_articles"]);
   });
 
   test("filters broadcast refreshes to the subscribed tables and reports channel status", async () => {

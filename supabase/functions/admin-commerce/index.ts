@@ -475,8 +475,20 @@ serve(async (req: Request): Promise<Response> => {
       supabase.from("site_settings").select("hero, navbar, promo_popup").eq("id", "global").maybeSingle(),
     ]);
 
-    if (ordersRes.error || productsRes.error || customersRes.error || activitiesRes.error || inventoryRes.error || categoriesRes.error || couponsRes.error || journalsRes.error || siteSettingsRes.error) {
-      return json({ error: "Unable to fetch admin data" }, 500);
+    const syncErrors = {
+      orders: ordersRes.error?.message,
+      products: productsRes.error?.message,
+      customers: customersRes.error?.message,
+      customerActivities: activitiesRes.error?.message,
+      inventory: inventoryRes.error?.message,
+      categories: categoriesRes.error?.message,
+      coupons: couponsRes.error?.message,
+      journals: journalsRes.error?.message,
+      siteSettings: siteSettingsRes.error?.message,
+    };
+    const activeSyncErrors = Object.fromEntries(Object.entries(syncErrors).filter(([, message]) => Boolean(message)));
+    if (Object.keys(activeSyncErrors).length) {
+      console.error("Admin data partial load errors:", activeSyncErrors);
     }
 
     return json({
@@ -490,6 +502,7 @@ serve(async (req: Request): Promise<Response> => {
       coupons: couponsRes.data || [],
       journals: journalsRes.data || [],
       siteSettings: siteSettingsRes.data || null,
+      syncErrors: activeSyncErrors,
     });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Internal server error" }, 500);

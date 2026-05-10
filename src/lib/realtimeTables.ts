@@ -16,6 +16,17 @@ export const storefrontRealtimeTables = [
   "journal_articles",
 ] as const;
 
+export const browserPostgresRealtimeTables = [
+  "categories",
+  "products",
+  "product_images",
+  "product_videos",
+  "product_variants",
+  "coupons",
+  "site_settings",
+  "journal_articles",
+] as const;
+
 export const COMMERCE_REALTIME_CHANNEL = "commerce-sync";
 export const COMMERCE_BROADCAST_EVENT = "commerce-updated";
 
@@ -67,6 +78,10 @@ function realtimeStatus(status: string): CommerceRealtimeStatus {
   return "connecting";
 }
 
+function browserSafePostgresTables(tables: readonly string[]) {
+  return tables.filter((table) => (browserPostgresRealtimeTables as readonly string[]).includes(table));
+}
+
 export function subscribeToStorefrontRealtime(
   supabaseClient: RealtimeClient,
   channelName: string,
@@ -91,12 +106,15 @@ export function subscribeToCommerceRealtime(
     refreshTimer = setTimeout(() => onChange(payload), options.debounceMs ?? 150);
   };
 
-  const postgresChannel = tables
-    .reduce(
-      (nextChannel, table) => nextChannel.on("postgres_changes", { event: "*", schema: "public", table }, () => scheduleChange({ action: "postgres-change", table })),
-      supabaseClient.channel(channelName),
-    )
-    .subscribe((status) => options.onStatusChange?.(realtimeStatus(status)));
+  const postgresTables = browserSafePostgresTables(tables);
+  const postgresChannel = postgresTables.length
+    ? postgresTables
+      .reduce(
+        (nextChannel, table) => nextChannel.on("postgres_changes", { event: "*", schema: "public", table }, () => scheduleChange({ action: "postgres-change", table })),
+        supabaseClient.channel(channelName),
+      )
+      .subscribe()
+    : null;
 
   const broadcastChannel = supabaseClient
     .channel(COMMERCE_REALTIME_CHANNEL, { config: { broadcast: { self: false } } })
@@ -108,7 +126,7 @@ export function subscribeToCommerceRealtime(
   return () => {
     if (refreshTimer) clearTimeout(refreshTimer);
     options.onStatusChange?.("disconnected");
-    supabaseClient.removeChannel(postgresChannel);
+    if (postgresChannel) supabaseClient.removeChannel(postgresChannel);
     supabaseClient.removeChannel(broadcastChannel);
   };
 }
