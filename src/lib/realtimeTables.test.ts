@@ -53,4 +53,48 @@ describe("storefrontRealtimeTables", () => {
     expect(channelNames).toEqual(["admin-commerce-sync", COMMERCE_REALTIME_CHANNEL]);
     expect(removedChannels).toHaveLength(2);
   });
+
+  test("filters broadcast refreshes to the subscribed tables and reports channel status", async () => {
+    const broadcastCallbacks: Array<(payload: { payload?: { action: string; table?: string } }) => void> = [];
+    const statuses: string[] = [];
+    let refreshes = 0;
+    const client = {
+      channel: () => {
+        const channel = {
+          on: (type: string, _filter: unknown, callback: (payload: { payload?: { action: string; table?: string } }) => void) => {
+            if (type === "broadcast") broadcastCallbacks.push(callback);
+            return channel;
+          },
+          subscribe: (callback?: (status: string) => void) => {
+            callback?.("SUBSCRIBED");
+            return channel;
+          },
+        };
+        return channel;
+      },
+      removeChannel: () => undefined,
+    };
+
+    const unsubscribe = subscribeToCommerceRealtime(
+      client,
+      "orders-only",
+      () => {
+        refreshes += 1;
+      },
+      ["orders"],
+      { debounceMs: 0, onStatusChange: (status) => statuses.push(status) },
+    );
+
+    broadcastCallbacks[0]({ payload: { action: "product-updated", table: "products" } });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(refreshes).toBe(0);
+
+    broadcastCallbacks[0]({ payload: { action: "order-created", table: "orders" } });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(refreshes).toBe(1);
+    expect(statuses).toContain("connected");
+
+    unsubscribe();
+    expect(statuses.at(-1)).toBe("disconnected");
+  });
 });

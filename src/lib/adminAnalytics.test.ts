@@ -26,7 +26,7 @@ describe("admin analytics", () => {
     }, now);
 
     expect(stats.ordersToday).toBe(2);
-    expect(stats.revenueToday).toBe(2000);
+    expect(stats.revenueToday).toBe(1200);
     expect(stats.pendingFulfilment).toBe(2);
     expect(stats.lowStock).toBe(1);
   });
@@ -38,11 +38,11 @@ describe("admin analytics", () => {
       { id: "o3", total: 700, status: "cancelled", payment_status: "paid", payment_method: "razorpay", created_at: "2026-05-09T13:00:00.000Z" },
     ], { start: "2026-05-08", end: "2026-05-09" });
 
-    expect(summary.revenue).toBe(1500);
-    expect(summary.orders).toBe(2);
-    expect(summary.averageOrderValue).toBe(750);
+    expect(summary.revenue).toBe(1000);
+    expect(summary.orders).toBe(1);
+    expect(summary.averageOrderValue).toBe(1000);
     expect(summary.paidOrders).toBe(1);
-    expect(summary.codOrders).toBe(1);
+    expect(summary.codOrders).toBe(0);
   });
 
   test("prefers checkout activity with order SKUs over older cart activity", () => {

@@ -51,7 +51,7 @@ import {
   saveLocalCoupon,
 } from "@/lib/localCommerce";
 import { CatalogTaxonomyGroup, catalogTaxonomy, selectionFromTags, tagsForCatalogSelection } from "@/lib/catalogTaxonomy";
-import { broadcastCommerceChange, subscribeToCommerceRealtime } from "@/lib/realtimeTables";
+import { broadcastCommerceChange, subscribeToCommerceRealtime, type CommerceRealtimeStatus } from "@/lib/realtimeTables";
 import {
   buildCustomerExportCsv,
   calculateAdminStats,
@@ -96,6 +96,19 @@ function statusBadge(status: string) {
   return "bg-secondary text-muted-foreground border-border";
 }
 
+function realtimeBadge(status: CommerceRealtimeStatus) {
+  if (status === "connected") return "bg-green-100 text-green-800 border-green-200";
+  if (status === "reconnecting" || status === "connecting") return "bg-amber-100 text-amber-800 border-amber-200";
+  return "bg-red-100 text-red-800 border-red-200";
+}
+
+function realtimeLabel(status: CommerceRealtimeStatus) {
+  if (status === "connected") return "Realtime connected";
+  if (status === "reconnecting") return "Realtime reconnecting";
+  if (status === "connecting") return "Realtime connecting";
+  return "Realtime offline";
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -113,6 +126,7 @@ export default function Admin() {
   const [section, setSection] = useState<AdminSection>("dashboard");
   const [data, setData] = useState<any>({ orders: [], products: [], customers: [], customerActivities: [], inventory: [], categories: [], coupons: [], journals: [], siteSettings: defaultSiteSettings });
   const [isLoading, setIsLoading] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<CommerceRealtimeStatus>("connecting");
   const [query, setQuery] = useState("");
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [productTab, setProductTab] = useState("list");
@@ -256,7 +270,7 @@ export default function Admin() {
     if (isLocalAdmin) return;
 
     await new Promise<void>((resolve) => {
-      const channel = supabase.channel(SITE_SETTINGS_REALTIME_CHANNEL, { config: { broadcast: { self: true } } });
+      const channel = supabase.channel(SITE_SETTINGS_REALTIME_CHANNEL, { config: { broadcast: { self: true, ack: true } } });
       let settled = false;
       const finish = () => {
         if (settled) return;
@@ -333,12 +347,18 @@ export default function Admin() {
       if (document.visibilityState === "visible") fetchAdminData();
     };
     document.addEventListener("visibilitychange", refreshOnFocus);
-    if (isLocalAdmin) return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", refreshOnFocus);
-    };
+    if (isLocalAdmin) {
+      setRealtimeStatus("disconnected");
+      return () => {
+        window.clearInterval(interval);
+        document.removeEventListener("visibilitychange", refreshOnFocus);
+      };
+    }
 
-    const unsubscribe = subscribeToCommerceRealtime(supabase, "admin-commerce-sync", fetchAdminData);
+    const unsubscribe = subscribeToCommerceRealtime(supabase, "admin-commerce-sync", fetchAdminData, undefined, {
+      debounceMs: 250,
+      onStatusChange: setRealtimeStatus,
+    });
 
     return () => {
       window.clearInterval(interval);
@@ -994,6 +1014,10 @@ export default function Admin() {
               {isLocalAdmin && <p className="text-[11px] text-muted-foreground">Local catalog mode</p>}
             </div>
             <div className="flex items-center gap-2">
+              <Badge className={`${realtimeBadge(realtimeStatus)} hidden sm:inline-flex`}>
+                <Radio className="w-3 h-3 mr-1" />
+                {realtimeLabel(realtimeStatus)}
+              </Badge>
               <Button variant="outline" size="sm" onClick={fetchAdminData} disabled={isLoading}>
                 <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                 Refresh

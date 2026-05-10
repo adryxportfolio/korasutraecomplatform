@@ -56,7 +56,7 @@ function isLiveOrder(order: AdminOrder) {
 }
 
 function isRevenueOrder(order: AdminOrder) {
-  return isLiveOrder(order) && !["failed", "refunded"].includes(String(order.payment_status || ""));
+  return isLiveOrder(order) && order.payment_status === "paid";
 }
 
 function isSameLocalDay(value: string, now: Date) {

@@ -32,6 +32,8 @@ export type CommerceRealtimePayload = {
   savedAt?: string;
 };
 
+export type CommerceRealtimeStatus = "connecting" | "connected" | "reconnecting" | "disconnected" | "error";
+
 type RealtimeChannel = {
   on: (
     type: "postgres_changes" | "broadcast",
@@ -47,13 +49,32 @@ type RealtimeClient = {
   removeChannel: (channel: RealtimeChannel) => unknown;
 };
 
+type CommerceRealtimeOptions = {
+  onStatusChange?: (status: CommerceRealtimeStatus) => void;
+  debounceMs?: number;
+};
+
+function payloadMatchesTables(payload: CommerceRealtimePayload | undefined, tables: readonly string[]) {
+  if (!payload?.table && !payload?.tables?.length) return true;
+  const changedTables = [payload.table, ...(payload.tables || [])].filter(Boolean);
+  return changedTables.some((table) => tables.includes(table as string));
+}
+
+function realtimeStatus(status: string): CommerceRealtimeStatus {
+  if (status === "SUBSCRIBED") return "connected";
+  if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") return "reconnecting";
+  if (status === "CLOSED") return "disconnected";
+  return "connecting";
+}
+
 export function subscribeToStorefrontRealtime(
   supabaseClient: RealtimeClient,
   channelName: string,
   onChange: () => void,
   tables: readonly string[] = storefrontRealtimeTables,
+  options: CommerceRealtimeOptions = {},
 ) {
-  return subscribeToCommerceRealtime(supabaseClient, channelName, onChange, tables);
+  return subscribeToCommerceRealtime(supabaseClient, channelName, onChange, tables, options);
 }
 
 export function subscribeToCommerceRealtime(
@@ -61,27 +82,39 @@ export function subscribeToCommerceRealtime(
   channelName: string,
   onChange: (payload?: CommerceRealtimePayload) => void,
   tables: readonly string[] = storefrontRealtimeTables,
+  options: CommerceRealtimeOptions = {},
 ) {
+  options.onStatusChange?.("connecting");
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleChange = (payload?: CommerceRealtimePayload) => {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => onChange(payload), options.debounceMs ?? 150);
+  };
+
   const postgresChannel = tables
     .reduce(
-      (nextChannel, table) => nextChannel.on("postgres_changes", { event: "*", schema: "public", table }, () => onChange()),
+      (nextChannel, table) => nextChannel.on("postgres_changes", { event: "*", schema: "public", table }, () => scheduleChange({ action: "postgres-change", table })),
       supabaseClient.channel(channelName),
     )
-    .subscribe();
+    .subscribe((status) => options.onStatusChange?.(realtimeStatus(status)));
 
   const broadcastChannel = supabaseClient
     .channel(COMMERCE_REALTIME_CHANNEL, { config: { broadcast: { self: false } } })
-    .on("broadcast", { event: COMMERCE_BROADCAST_EVENT }, (event) => onChange(event?.payload))
-    .subscribe();
+    .on("broadcast", { event: COMMERCE_BROADCAST_EVENT }, (event) => {
+      if (payloadMatchesTables(event?.payload, tables)) scheduleChange(event?.payload);
+    })
+    .subscribe((status) => options.onStatusChange?.(realtimeStatus(status)));
 
   return () => {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    options.onStatusChange?.("disconnected");
     supabaseClient.removeChannel(postgresChannel);
     supabaseClient.removeChannel(broadcastChannel);
   };
 }
 
 export async function broadcastCommerceChange(supabaseClient: RealtimeClient, payload: CommerceRealtimePayload) {
-  const channel = supabaseClient.channel(COMMERCE_REALTIME_CHANNEL, { config: { broadcast: { self: true } } });
+  const channel = supabaseClient.channel(COMMERCE_REALTIME_CHANNEL, { config: { broadcast: { self: true, ack: true } } });
   const message = {
     type: "broadcast" as const,
     event: COMMERCE_BROADCAST_EVENT,
