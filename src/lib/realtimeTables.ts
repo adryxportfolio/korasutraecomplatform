@@ -65,6 +65,14 @@ type CommerceRealtimeOptions = {
   debounceMs?: number;
 };
 
+function combinedRealtimeStatus(statuses: CommerceRealtimeStatus[]) {
+  if (statuses.includes("connected")) return "connected";
+  if (statuses.includes("connecting")) return "connecting";
+  if (statuses.includes("reconnecting")) return "reconnecting";
+  if (statuses.includes("error")) return "error";
+  return "disconnected";
+}
+
 function payloadMatchesTables(payload: CommerceRealtimePayload | undefined, tables: readonly string[]) {
   if (!payload?.table && !payload?.tables?.length) return true;
   const changedTables = [payload.table, ...(payload.tables || [])].filter(Boolean);
@@ -99,6 +107,12 @@ export function subscribeToCommerceRealtime(
   tables: readonly string[] = storefrontRealtimeTables,
   options: CommerceRealtimeOptions = {},
 ) {
+  const channelStatuses: { postgres?: CommerceRealtimeStatus; broadcast?: CommerceRealtimeStatus } = {};
+  const reportStatus = (channel: "postgres" | "broadcast", status: CommerceRealtimeStatus) => {
+    channelStatuses[channel] = status;
+    options.onStatusChange?.(combinedRealtimeStatus(Object.values(channelStatuses)));
+  };
+
   options.onStatusChange?.("connecting");
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   const scheduleChange = (payload?: CommerceRealtimePayload) => {
@@ -113,7 +127,7 @@ export function subscribeToCommerceRealtime(
         (nextChannel, table) => nextChannel.on("postgres_changes", { event: "*", schema: "public", table }, () => scheduleChange({ action: "postgres-change", table })),
         supabaseClient.channel(channelName),
       )
-      .subscribe()
+      .subscribe((status) => reportStatus("postgres", realtimeStatus(status)))
     : null;
 
   const broadcastChannel = supabaseClient
@@ -121,7 +135,7 @@ export function subscribeToCommerceRealtime(
     .on("broadcast", { event: COMMERCE_BROADCAST_EVENT }, (event) => {
       if (payloadMatchesTables(event?.payload, tables)) scheduleChange(event?.payload);
     })
-    .subscribe((status) => options.onStatusChange?.(realtimeStatus(status)));
+    .subscribe((status) => reportStatus("broadcast", realtimeStatus(status)));
 
   return () => {
     if (refreshTimer) clearTimeout(refreshTimer);

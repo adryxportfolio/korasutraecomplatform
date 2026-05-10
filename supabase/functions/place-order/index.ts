@@ -162,7 +162,7 @@ async function sendEmail(params: { apiKey: string; from: string; to: string; sub
 async function sendOrderEmailsWithResults(order: any, orderItems: any[]) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("RESEND_FROM_EMAIL") || "Kora Sutra <orders@korasutra.com>";
-  const adminEmail = Deno.env.get("ADMIN_ORDER_NOTIFICATION_EMAIL") || "korasutra.official@gmail.com";
+  const adminEmail = Deno.env.get("ADMIN_ORDER_NOTIFICATION_EMAIL") || Deno.env.get("ADMIN_NOTIFICATION_EMAIL") || "korasutra.official@gmail.com";
   if (!apiKey) {
     const result = { sent: false, reason: "RESEND_API_KEY is not configured" };
     console.warn("Order email skipped:", result.reason);

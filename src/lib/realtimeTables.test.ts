@@ -136,4 +136,33 @@ describe("storefrontRealtimeTables", () => {
     unsubscribe();
     expect(statuses.at(-1)).toBe("disconnected");
   });
+
+  test("keeps the dashboard status connected when postgres realtime is connected and broadcast closes", () => {
+    const statuses: string[] = [];
+    const client = {
+      channel: (name: string) => {
+        const channel = {
+          on: () => channel,
+          subscribe: (callback?: (status: string) => void) => {
+            callback?.(name === "catalog-sync" ? "SUBSCRIBED" : "CLOSED");
+            return channel;
+          },
+        };
+        return channel;
+      },
+      removeChannel: () => undefined,
+    };
+
+    const unsubscribe = subscribeToCommerceRealtime(
+      client,
+      "catalog-sync",
+      () => undefined,
+      ["products"],
+      { onStatusChange: (status) => statuses.push(status) },
+    );
+
+    expect(statuses).toContain("connected");
+    expect(statuses.at(-1)).toBe("connected");
+    unsubscribe();
+  });
 });
