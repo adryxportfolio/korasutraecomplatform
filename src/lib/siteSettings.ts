@@ -53,7 +53,7 @@ export const defaultSiteSettings: SiteSettings = {
   hero: {
     desktopImageUrl: "",
     mobileImageUrl: "",
-    altText: "Kora Sutra Sarees - Explore Our Collection of Handcrafted Tussar, Muslin & Silk Sarees",
+    altText: "Two women wearing handcrafted Kora Sutra sarees",
     ctaText: "Explore Our Collection",
     ctaHref: "/collections/all",
   },
