@@ -9,6 +9,7 @@ const corsHeaders = {
 };
 
 type CartLine = { variantId: string; quantity: number };
+type EmailResult = { sent: boolean; reason: string };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -24,6 +25,19 @@ function normalizePhone(phone: string) {
 function normalizeCountryCode(countryCode: string) {
   const digits = countryCode.replace(/\D/g, "") || "91";
   return `+${digits}`;
+}
+
+function isValidEmail(value: unknown) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 async function notifyCommerceSync(payload: Record<string, unknown>) {
@@ -125,6 +139,81 @@ async function sendOrderEmails(order: any, orderItems: any[]) {
   });
 }
 
+async function sendEmail(params: { apiKey: string; from: string; to: string; subject: string; html: string }): Promise<EmailResult> {
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${params.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: params.from,
+        to: [params.to],
+        subject: params.subject,
+        html: params.html,
+      }),
+    });
+    const responseBody = await response.text();
+    if (!response.ok) return { sent: false, reason: `Resend ${response.status}: ${responseBody}` };
+    return { sent: true, reason: "" };
+  } catch (error) {
+    return { sent: false, reason: error instanceof Error ? error.message : "Email request failed" };
+  }
+}
+
+async function sendOrderEmailsWithResults(order: any, orderItems: any[]) {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  const from = Deno.env.get("RESEND_FROM_EMAIL") || "Kora Sutra <orders@korasutra.com>";
+  const adminEmail = Deno.env.get("ADMIN_ORDER_NOTIFICATION_EMAIL") || "korasutra.official@gmail.com";
+  if (!apiKey) {
+    const result = { sent: false, reason: "RESEND_API_KEY is not configured" };
+    console.warn("Order email skipped:", result.reason);
+    return { customer: result, admin: result };
+  }
+
+  const lineItems = orderItems
+    .map((item) => `<li>${Number(item.quantity)}x ${escapeHtml(item.product_title)} (${escapeHtml(item.sku || "no SKU")}) - INR ${Number(item.line_total).toFixed(2)}</li>`)
+    .join("");
+
+  const admin = await sendEmail({
+    apiKey,
+    from,
+    to: adminEmail,
+    subject: `New order ${order.order_number} - INR ${Number(order.total || 0).toFixed(2)}`,
+    html: `
+      <h2>New order ${escapeHtml(order.order_number)}</h2>
+      <p><strong>Customer:</strong> ${escapeHtml(order.ship_full_name)}</p>
+      <p><strong>Phone:</strong> ${escapeHtml(order.contact_phone)}</p>
+      <p><strong>Email:</strong> ${escapeHtml(order.contact_email || "-")}</p>
+      <p><strong>Address:</strong> ${escapeHtml(order.ship_address_line1)}, ${escapeHtml(order.ship_address_line2 || "")} ${escapeHtml(order.ship_city)}, ${escapeHtml(order.ship_state)} ${escapeHtml(order.ship_postal_code)}</p>
+      <p><strong>Payment:</strong> ${escapeHtml(order.payment_method)} / ${escapeHtml(order.payment_status)}</p>
+      <p><strong>Total:</strong> INR ${Number(order.total || 0).toFixed(2)}</p>
+      <hr/>
+      <ul>${lineItems}</ul>
+    `,
+  });
+
+  let customer: EmailResult = { sent: false, reason: "Customer email is missing" };
+  if (order.contact_email) {
+    customer = await sendEmail({
+      apiKey,
+      from,
+      to: order.contact_email,
+      subject: `Order ${order.order_number} confirmed - Kora Sutra`,
+      html: `
+        <h2>Thank you for your order</h2>
+        <p>Your Kora Sutra order <strong>${escapeHtml(order.order_number)}</strong> is confirmed.</p>
+        <p>Total: <strong>INR ${Number(order.total || 0).toFixed(2)}</strong></p>
+        <p>Track your order: <a href="https://korasutra.com/order-tracking/${encodeURIComponent(order.order_number)}">https://korasutra.com/order-tracking/${escapeHtml(order.order_number)}</a></p>
+        <hr/>
+        <ul>${lineItems}</ul>
+      `,
+    });
+  }
+
+  if (!admin.sent) console.error(`Admin order email failed for ${order.order_number}:`, admin.reason);
+  if (!customer.sent) console.error(`Customer order email failed for ${order.order_number}:`, customer.reason);
+  return { customer, admin };
+}
+
 serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -135,11 +224,15 @@ serve(async (req: Request): Promise<Response> => {
     const contact = body.contact || {};
     const contactPhone = normalizePhone(String(contact.phone || ""));
     const contactCountryCode = normalizeCountryCode(String(contact.countryCode || "+91"));
+    const contactEmail = String(contact.email || "").trim().toLowerCase();
     const paymentMethod = body.paymentMethod === "cod" ? "cod" : "razorpay";
 
     if (!items.length) return json({ error: "Cart is empty" }, 400);
     if (!contactPhone || !shipping.fullName || !shipping.addressLine1 || !shipping.city || !shipping.state || !shipping.postalCode) {
       return json({ error: "Contact and shipping details are required" }, 400);
+    }
+    if (!isValidEmail(contactEmail)) {
+      return json({ error: "A valid email is required for the order receipt" }, 400);
     }
 
     const supabase = createClient(
@@ -261,10 +354,10 @@ serve(async (req: Request): Promise<Response> => {
       return json({ error: "Razorpay payment details are required" }, 400);
     }
 
-    const { data: customer } = await supabase
+    const { data: customer, error: customerUpdateError } = await supabase
       .from("customers")
       .update({
-        email: contact.email || null,
+        email: contactEmail,
         name: shipping.fullName,
         is_verified: true,
         updated_at: new Date().toISOString(),
@@ -272,6 +365,7 @@ serve(async (req: Request): Promise<Response> => {
       .eq("id", customerSession.customer_id)
       .select("id")
       .single();
+    if (customerUpdateError || !customer) return json({ error: "Unable to update customer profile" }, 500);
 
     const { data: generatedNumber, error: numberError } = await supabase.rpc("generate_order_number");
     if (numberError || !generatedNumber) return json({ error: "Unable to generate order number" }, 500);
@@ -281,8 +375,8 @@ serve(async (req: Request): Promise<Response> => {
       .from("orders")
       .insert({
         order_number: generatedNumber,
-        customer_id: customer?.id || null,
-        contact_email: contact.email || null,
+        customer_id: customer.id,
+        contact_email: contactEmail,
         contact_phone: contactPhone,
         ship_full_name: shipping.fullName,
         ship_phone: normalizePhone(String(shipping.phone || contactPhone)),
@@ -370,10 +464,10 @@ serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    await sendOrderEmails({
+    const emailResults = await sendOrderEmailsWithResults({
       ...order,
       ...{
-        contact_email: contact.email || null,
+        contact_email: contactEmail,
         contact_phone: contactPhone,
         ship_full_name: shipping.fullName,
         ship_address_line1: shipping.addressLine1,
@@ -392,10 +486,11 @@ serve(async (req: Request): Promise<Response> => {
       tables: ["orders", "order_items", "customers", "product_variants", "inventory_movements", "coupon_redemptions"],
       orderId: order.id,
       orderNumber: order.order_number,
-      customerId: customer?.id || customerSession.customer_id,
+      customerId: customer.id,
+      emailResults,
     });
 
-    return json({ order_id: order.id, order_number: order.order_number });
+    return json({ order_id: order.id, order_number: order.order_number, emailResults });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Internal server error" }, 500);
   }

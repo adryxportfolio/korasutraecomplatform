@@ -67,6 +67,10 @@ function normalizePhoneInput(phone: string) {
   return phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
 }
 
+function isValidReceiptEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
 export default function Checkout() {
   const navigate = useNavigate();
   const { items, clearCart } = useCartStore();
@@ -249,7 +253,10 @@ export default function Checkout() {
       ...paymentPayload,
     });
     clearCart();
-    toast.success(`Order ${data.order_number} placed`, { position: "top-center" });
+    toast.success(`Order ${data.order_number} placed`, {
+      description: data.emailResults?.customer?.sent ? "Receipt sent to your email." : undefined,
+      position: "top-center",
+    });
     navigate(`/order-tracking/${data.order_number}`);
   };
 
@@ -421,6 +428,11 @@ export default function Checkout() {
       });
       return false;
     }
+    if (!isValidReceiptEmail(contact.email)) {
+      setAccordionValue(["contact", "shipping", "payment"]);
+      toast.error("Enter a valid email for your order receipt", { position: "top-center" });
+      return false;
+    }
     const missingAddressField = ADDRESS_REQUIRED_FIELDS.find(([field]) => !String(shipping[field] || "").trim());
     if (missingAddressField) {
       setAccordionValue(["shipping", "payment"]);
@@ -485,8 +497,8 @@ export default function Checkout() {
                       </div>
                     </div>
                     <div>
-                      <Label>Email for receipt</Label>
-                      <Input className="h-12" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} placeholder="you@example.com" type="email" />
+                      <Label>Email for receipt *</Label>
+                      <Input className="h-12" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} placeholder="you@example.com" type="email" required />
                     </div>
                     <div className="border border-dashed border-border rounded-sm p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="min-w-0">

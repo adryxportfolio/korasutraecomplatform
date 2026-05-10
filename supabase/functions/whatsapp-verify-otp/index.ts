@@ -42,6 +42,35 @@ function optionalText(value: unknown) {
   return text ? text : null;
 }
 
+async function notifyCommerceSync(payload: Record<string, unknown>) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) return;
+
+    const response = await fetch(`${supabaseUrl}/realtime/v1/api/broadcast`, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messages: [{
+          topic: "commerce-sync",
+          event: "commerce-updated",
+          payload: { ...payload, savedAt: new Date().toISOString() },
+        }],
+      }),
+    });
+    if (!response.ok) {
+      console.error("Customer login realtime broadcast failed:", response.status, await response.text());
+    }
+  } catch (error) {
+    console.error("Customer login realtime broadcast error:", error);
+  }
+}
+
 serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -153,6 +182,18 @@ serve(async (req: Request): Promise<Response> => {
       .from("otp_verifications")
       .update({ verified: true, attempts: Number(verification.attempts || 0) + 1 })
       .eq("id", verification.id);
+
+    await supabase.from("customer_activities").insert({
+      customer_id: customer.id,
+      activity_type: "just_visit",
+      metadata: { source: "whatsapp-login" },
+    });
+
+    await notifyCommerceSync({
+      action: "customer-login",
+      tables: ["customers", "customer_activities"],
+      customerId: customer.id,
+    });
 
     return json({
       success: true,
