@@ -71,7 +71,7 @@ import {
 } from "@/lib/siteSettings";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const LOCAL_ADMIN_FALLBACK_ENABLED = import.meta.env.VITE_ENABLE_LOCAL_ADMIN_FALLBACK === "true";
+const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
 
 type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "customers" | "coupons" | "sales" | "journals" | "settings";
 
