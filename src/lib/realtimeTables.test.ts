@@ -44,7 +44,6 @@ describe("storefrontRealtimeTables", () => {
       "coupons",
       "site_settings",
       "journal_articles",
-      "reviews",
     ]);
   });
 
@@ -92,7 +91,48 @@ describe("storefrontRealtimeTables", () => {
     unsubscribe();
 
     expect(channelNames).toEqual(["mixed-sync", COMMERCE_REALTIME_CHANNEL]);
-    expect(postgresTables).toEqual(["products", "journal_articles", "reviews"]);
+    expect(postgresTables).toEqual(["products", "journal_articles"]);
+  });
+
+  test("refreshes review subscribers from commerce broadcasts without direct review postgres changes", async () => {
+    const postgresTables: string[] = [];
+    const channelNames: string[] = [];
+    const broadcastCallbacks: Array<(payload: { payload?: { action: string; table?: string } }) => void> = [];
+    let refreshes = 0;
+    const client = {
+      channel: (name: string) => {
+        const channel = {
+          on: (type: string, filter: { table?: string } | { event: string }, callback?: (payload: { payload?: { action: string; table?: string } }) => void) => {
+            if (type === "postgres_changes" && "table" in filter && filter.table) postgresTables.push(filter.table);
+            if (type === "broadcast" && callback) broadcastCallbacks.push(callback);
+            return channel;
+          },
+          subscribe: () => channel,
+        };
+        channelNames.push(name);
+        return channel;
+      },
+      removeChannel: () => undefined,
+    };
+
+    const unsubscribe = subscribeToCommerceRealtime(
+      client,
+      "reviews-sync",
+      () => {
+        refreshes += 1;
+      },
+      ["reviews"],
+      { debounceMs: 0 },
+    );
+
+    expect(channelNames).toEqual([COMMERCE_REALTIME_CHANNEL]);
+    expect(postgresTables).toEqual([]);
+
+    broadcastCallbacks[0]({ payload: { action: "review-created", table: "reviews" } });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(refreshes).toBe(1);
+
+    unsubscribe();
   });
 
   test("filters broadcast refreshes to the subscribed tables and reports channel status", async () => {
