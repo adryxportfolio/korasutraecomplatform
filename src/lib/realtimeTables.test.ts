@@ -25,6 +25,7 @@ describe("storefrontRealtimeTables", () => {
       "inventory_movements",
       "site_settings",
       "journal_articles",
+      "reviews",
     ]);
   });
 
@@ -43,6 +44,7 @@ describe("storefrontRealtimeTables", () => {
       "coupons",
       "site_settings",
       "journal_articles",
+      "reviews",
     ]);
   });
 
@@ -86,11 +88,11 @@ describe("storefrontRealtimeTables", () => {
       removeChannel: () => undefined,
     };
 
-    const unsubscribe = subscribeToCommerceRealtime(client, "mixed-sync", () => undefined, ["orders", "customers", "products", "journal_articles"]);
+    const unsubscribe = subscribeToCommerceRealtime(client, "mixed-sync", () => undefined, ["orders", "customers", "products", "journal_articles", "reviews"]);
     unsubscribe();
 
     expect(channelNames).toEqual(["mixed-sync", COMMERCE_REALTIME_CHANNEL]);
-    expect(postgresTables).toEqual(["products", "journal_articles"]);
+    expect(postgresTables).toEqual(["products", "journal_articles", "reviews"]);
   });
 
   test("filters broadcast refreshes to the subscribed tables and reports channel status", async () => {

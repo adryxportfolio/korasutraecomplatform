@@ -460,10 +460,36 @@ serve(async (req: Request): Promise<Response> => {
         return json({ success: true });
       }
 
+      if (body.action === "reply-review") {
+        const reply = String(body.reply || "").trim();
+        if (!body.reviewId) return json({ error: "Review is required" }, 400);
+        if (reply.length > 2000) return json({ error: "Reply cannot exceed 2000 characters" }, 400);
+
+        const { error } = await supabase
+          .from("reviews")
+          .update({
+            admin_reply: reply || null,
+            admin_reply_author: reply ? session.admin?.username || "Admin" : null,
+            admin_replied_at: reply ? new Date().toISOString() : null,
+          })
+          .eq("id", body.reviewId);
+        if (error) return json({ error: "Unable to save review reply" }, 500);
+        await notifyCommerceSync({ action: "review-replied", table: "reviews", reviewId: body.reviewId });
+        return json({ success: true });
+      }
+
+      if (body.action === "delete-review") {
+        if (!body.reviewId) return json({ error: "Review is required" }, 400);
+        const { error } = await supabase.from("reviews").delete().eq("id", body.reviewId);
+        if (error) return json({ error: "Unable to delete review" }, 500);
+        await notifyCommerceSync({ action: "review-deleted", table: "reviews", reviewId: body.reviewId });
+        return json({ success: true });
+      }
+
       return json({ error: "Unknown action" }, 400);
     }
 
-    const [ordersRes, productsRes, customersRes, activitiesRes, inventoryRes, categoriesRes, couponsRes, journalsRes, siteSettingsRes] = await Promise.all([
+    const [ordersRes, productsRes, customersRes, activitiesRes, inventoryRes, categoriesRes, couponsRes, journalsRes, reviewsRes, siteSettingsRes] = await Promise.all([
       supabase.from("orders").select("*, order_items(*)").order("created_at", { ascending: false }).limit(100),
       supabase.from("products").select("*, category:categories(slug, name), product_images(*), product_videos(*), product_variants(*)").order("updated_at", { ascending: false }).limit(200),
       supabase.from("customers").select("id, phone, country_code, name, email, is_verified, created_at, updated_at").order("updated_at", { ascending: false }).limit(200),
@@ -472,6 +498,7 @@ serve(async (req: Request): Promise<Response> => {
       supabase.from("categories").select("*").order("sort_order", { ascending: true }),
       supabase.from("coupons").select("*, coupon_redemptions(id, discount_amount, created_at)").order("priority", { ascending: false }).order("created_at", { ascending: false }).limit(200),
       supabase.from("journal_articles").select("*").order("published_at", { ascending: false }).order("created_at", { ascending: false }).limit(200),
+      supabase.from("reviews").select("*").order("created_at", { ascending: false }).limit(300),
       supabase.from("site_settings").select("hero, navbar, promo_popup").eq("id", "global").maybeSingle(),
     ]);
 
@@ -484,6 +511,7 @@ serve(async (req: Request): Promise<Response> => {
       categories: categoriesRes.error?.message,
       coupons: couponsRes.error?.message,
       journals: journalsRes.error?.message,
+      reviews: reviewsRes.error?.message,
       siteSettings: siteSettingsRes.error?.message,
     };
     const activeSyncErrors = Object.fromEntries(Object.entries(syncErrors).filter(([, message]) => Boolean(message)));
@@ -501,6 +529,7 @@ serve(async (req: Request): Promise<Response> => {
       categories: categoriesRes.data || [],
       coupons: couponsRes.data || [],
       journals: journalsRes.data || [],
+      reviews: reviewsRes.data || [],
       siteSettings: siteSettingsRes.data || null,
       syncErrors: activeSyncErrors,
     });

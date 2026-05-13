@@ -14,6 +14,7 @@ export const storefrontRealtimeTables = [
   "inventory_movements",
   "site_settings",
   "journal_articles",
+  "reviews",
 ] as const;
 
 export const browserPostgresRealtimeTables = [
@@ -25,6 +26,7 @@ export const browserPostgresRealtimeTables = [
   "coupons",
   "site_settings",
   "journal_articles",
+  "reviews",
 ] as const;
 
 export const COMMERCE_REALTIME_CHANNEL = "commerce-sync";

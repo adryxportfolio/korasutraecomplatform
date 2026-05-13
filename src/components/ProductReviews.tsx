@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Star, ThumbsUp, User, ChevronDown, X } from 'lucide-react';
+import { Star, ThumbsUp, User, ChevronDown, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,10 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { CUSTOMER_SESSION_CHANGED_EVENT, getCustomerSessionProfile, getCustomerSessionToken } from '@/lib/customerSession';
+import { getReviewGateMessage, normalizeReviewForm, type ReviewEligibility } from '@/lib/productReviews';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 interface Review {
   id: string;
@@ -16,6 +20,9 @@ interface Review {
   content: string;
   is_verified_purchase: boolean;
   helpful_count: number;
+  admin_reply: string | null;
+  admin_reply_author: string | null;
+  admin_replied_at: string | null;
   created_at: string;
 }
 
@@ -108,6 +115,8 @@ export const ProductReviews = ({ productId, productHandle, productTitle }: Produ
   const [isLoading, setIsLoading] = useState(true);
   const [showWriteReview, setShowWriteReview] = useState(false);
   const [visibleCount, setVisibleCount] = useState(5);
+  const [eligibility, setEligibility] = useState<ReviewEligibility>({ eligible: false, hasSession: false });
+  const [isCheckingEligibility, setIsCheckingEligibility] = useState(false);
   
   // Form state - removed email field for privacy
   const [formRating, setFormRating] = useState(5);
@@ -115,6 +124,47 @@ export const ProductReviews = ({ productId, productHandle, productTitle }: Produ
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const checkReviewEligibility = useCallback(async () => {
+    const token = getCustomerSessionToken();
+    const profile = getCustomerSessionProfile();
+    if (profile?.name) setFormName((current) => current || profile.name || '');
+
+    if (!token) {
+      setEligibility({ eligible: false, hasSession: false });
+      return;
+    }
+
+    setIsCheckingEligibility(true);
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/product-review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': token,
+        },
+        body: JSON.stringify({
+          action: 'check',
+          productId,
+          productHandle,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      setEligibility({
+        eligible: Boolean(response.ok && data.eligible),
+        hasSession: true,
+        reason: data.reason || (response.ok ? undefined : 'We could not verify your purchase. Please try again.'),
+      });
+    } catch {
+      setEligibility({
+        eligible: false,
+        hasSession: true,
+        reason: 'We could not verify your purchase. Please try again.',
+      });
+    } finally {
+      setIsCheckingEligibility(false);
+    }
+  }, [productId, productHandle]);
 
   const fetchReviews = useCallback(async () => {
     try {
@@ -148,13 +198,37 @@ export const ProductReviews = ({ productId, productHandle, productTitle }: Produ
   useEffect(() => {
     fetchReviews();
     fetchStats();
-  }, [fetchReviews, fetchStats]);
+    checkReviewEligibility();
+  }, [fetchReviews, fetchStats, checkReviewEligibility]);
+
+  useEffect(() => {
+    const syncSession = () => checkReviewEligibility();
+    window.addEventListener(CUSTOMER_SESSION_CHANGED_EVENT, syncSession);
+    window.addEventListener('storage', syncSession);
+    return () => {
+      window.removeEventListener(CUSTOMER_SESSION_CHANGED_EVENT, syncSession);
+      window.removeEventListener('storage', syncSession);
+    };
+  }, [checkReviewEligibility]);
 
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formName.trim() || !formContent.trim()) {
+    const normalized = normalizeReviewForm({
+      customerName: formName,
+      rating: formRating,
+      title: formTitle,
+      content: formContent,
+    });
+
+    if (!normalized.customerName || !normalized.content) {
       toast.error('Please fill in all required fields');
+      return;
+    }
+
+    const token = getCustomerSessionToken();
+    if (!token || !eligibility.eligible) {
+      toast.error(getReviewGateMessage(eligibility));
       return;
     }
 
@@ -166,18 +240,21 @@ export const ProductReviews = ({ productId, productHandle, productTitle }: Produ
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('reviews')
-        .insert({
-          product_id: productId,
-          product_handle: productHandle,
-          customer_name: formName.trim(),
-          rating: formRating,
-          title: formTitle.trim() || null,
-          content: formContent.trim(),
-        });
-
-      if (error) throw error;
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/product-review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': token,
+        },
+        body: JSON.stringify({
+          action: 'submit',
+          productId,
+          productHandle,
+          ...normalized,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.error) throw new Error(data.error || 'Failed to submit review');
 
       // Set rate limit cooldown
       setReviewCooldown(productHandle);
@@ -192,13 +269,16 @@ export const ProductReviews = ({ productId, productHandle, productTitle }: Produ
       // Refresh reviews
       fetchReviews();
       fetchStats();
+      checkReviewEligibility();
     } catch (error) {
       console.error('Error submitting review:', error);
-      toast.error('Failed to submit review. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to submit review. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const reviewGateMessage = getReviewGateMessage(eligibility);
 
   const handleHelpful = async (reviewId: string) => {
     // Rate limiting check for helpful button
@@ -269,7 +349,8 @@ export const ProductReviews = ({ productId, productHandle, productTitle }: Produ
         
         <Dialog open={showWriteReview} onOpenChange={setShowWriteReview}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="uppercase tracking-widest text-xs">
+            <Button variant="outline" className="uppercase tracking-widest text-xs" disabled={!eligibility.eligible || isCheckingEligibility}>
+              {isCheckingEligibility && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
               Write a Review
             </Button>
           </DialogTrigger>
@@ -346,6 +427,11 @@ export const ProductReviews = ({ productId, productHandle, productTitle }: Produ
             </form>
           </DialogContent>
         </Dialog>
+        {!eligibility.eligible && reviewGateMessage && (
+          <p className="text-xs text-muted-foreground md:text-right max-w-sm">
+            {reviewGateMessage}
+          </p>
+        )}
       </div>
 
       {/* Rating Breakdown */}
@@ -382,8 +468,8 @@ export const ProductReviews = ({ productId, productHandle, productTitle }: Produ
       {reviews.length === 0 ? (
         <div className="text-center py-12 bg-secondary/10 rounded-lg">
           <User className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-          <p className="text-muted-foreground mb-4">No reviews yet. Be the first to review this product!</p>
-          <Button variant="outline" onClick={() => setShowWriteReview(true)}>
+          <p className="text-muted-foreground mb-4">Reviews appear after verified purchase customers share their experience.</p>
+          <Button variant="outline" onClick={() => setShowWriteReview(true)} disabled={!eligibility.eligible}>
             Write a Review
           </Button>
         </div>
@@ -413,6 +499,15 @@ export const ProductReviews = ({ productId, productHandle, productTitle }: Produ
               <p className="text-sm text-foreground/80 mb-3 leading-relaxed break-words">
                 {review.content}
               </p>
+
+              {review.admin_reply && (
+                <div className="mb-3 border border-border bg-secondary/20 rounded-sm p-3">
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">
+                    Response from Kora Sutra
+                  </p>
+                  <p className="text-sm text-foreground/80 leading-relaxed break-words">{review.admin_reply}</p>
+                </div>
+              )}
               
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{review.customer_name}</span>

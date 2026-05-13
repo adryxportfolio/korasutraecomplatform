@@ -25,6 +25,8 @@ import Admin from "./pages/Admin";
 import Journals from "./pages/Journals";
 import JournalArticle from "./pages/JournalArticle";
 import Checkout from "./pages/Checkout";
+import AddToCartRedirect from "./pages/AddToCartRedirect";
+import ThankYou from "./pages/ThankYou";
 import { CustomerActivityTracker } from "./components/CustomerActivityTracker";
 
 const queryClient = new QueryClient();
@@ -56,6 +58,8 @@ const App = () => (
             <Route path="/order-tracking" element={<OrderTracking />} />
             <Route path="/order-tracking/:orderNumber" element={<OrderTracking />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/cart/add/:handle" element={<AddToCartRedirect />} />
+            <Route path="/thank-you/:orderNumber" element={<ThankYou />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/journals" element={<Journals />} />
             <Route path="/journals/:slug" element={<JournalArticle />} />

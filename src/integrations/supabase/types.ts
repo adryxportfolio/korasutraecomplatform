@@ -214,12 +214,17 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          admin_replied_at: string | null
+          admin_reply: string | null
+          admin_reply_author: string | null
           customer_email: string | null
+          customer_id: string | null
           customer_name: string
           helpful_count: number | null
           id: string
           is_approved: boolean | null
           is_verified_purchase: boolean | null
+          order_item_id: string | null
           product_handle: string
           product_id: string
           rating: number
@@ -229,12 +234,17 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string
+          admin_replied_at?: string | null
+          admin_reply?: string | null
+          admin_reply_author?: string | null
           customer_email?: string | null
+          customer_id?: string | null
           customer_name: string
           helpful_count?: number | null
           id?: string
           is_approved?: boolean | null
           is_verified_purchase?: boolean | null
+          order_item_id?: string | null
           product_handle: string
           product_id: string
           rating: number
@@ -244,12 +254,17 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          admin_replied_at?: string | null
+          admin_reply?: string | null
+          admin_reply_author?: string | null
           customer_email?: string | null
+          customer_id?: string | null
           customer_name?: string
           helpful_count?: number | null
           id?: string
           is_approved?: boolean | null
           is_verified_purchase?: boolean | null
+          order_item_id?: string | null
           product_handle?: string
           product_id?: string
           rating?: number
@@ -269,6 +284,9 @@ export type Database = {
         Returns: {
           content: string
           created_at: string
+          admin_replied_at: string | null
+          admin_reply: string | null
+          admin_reply_author: string | null
           customer_name: string
           helpful_count: number
           id: string

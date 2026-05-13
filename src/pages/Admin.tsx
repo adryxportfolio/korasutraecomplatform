@@ -14,6 +14,7 @@ import {
   Loader2,
   LogOut,
   Megaphone,
+  MessageSquare,
   Package,
   Plus,
   Radio,
@@ -69,17 +70,20 @@ import {
   siteSettingsToRow,
   type SiteSettings,
 } from "@/lib/siteSettings";
+import { buildEditableJournalRows } from "@/lib/journalAdminRows";
+import { buildAddToCartUrl } from "@/lib/addToCartUrl";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
 
-type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "customers" | "coupons" | "sales" | "journals" | "settings";
+type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "reviews" | "customers" | "coupons" | "sales" | "journals" | "settings";
 
 const navItems: Array<{ id: AdminSection; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "products", label: "Products", icon: Package },
   { id: "inventory", label: "Inventory", icon: Boxes },
   { id: "orders", label: "Orders", icon: ShoppingBag },
+  { id: "reviews", label: "Reviews", icon: MessageSquare },
   { id: "customers", label: "Customers", icon: Users },
   { id: "coupons", label: "Coupons", icon: Tags },
   { id: "sales", label: "Sales", icon: BarChart3 },
@@ -134,7 +138,7 @@ export default function Admin() {
   const [loginPassword, setLoginPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [section, setSection] = useState<AdminSection>("dashboard");
-  const [data, setData] = useState<any>({ orders: [], products: [], customers: [], customerActivities: [], inventory: [], categories: [], coupons: [], journals: [], siteSettings: defaultSiteSettings });
+  const [data, setData] = useState<any>({ orders: [], products: [], customers: [], customerActivities: [], inventory: [], categories: [], coupons: [], journals: [], reviews: [], siteSettings: defaultSiteSettings });
   const [isLoading, setIsLoading] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<CommerceRealtimeStatus>("connecting");
   const [query, setQuery] = useState("");
@@ -142,6 +146,7 @@ export default function Admin() {
   const [productTab, setProductTab] = useState("list");
   const [couponTab, setCouponTab] = useState("list");
   const [journalTab, setJournalTab] = useState("list");
+  const [reviewReplies, setReviewReplies] = useState<Record<string, string>>({});
   const [isImporting, setIsImporting] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [salesRange, setSalesRange] = useState({
@@ -259,6 +264,8 @@ export default function Admin() {
       }
       if (action === "upsert-journal") return { success: true, journalId: `local-journal-${Date.now()}` };
       if (action === "delete-journal") return { success: true };
+      if (action === "reply-review") return { success: true };
+      if (action === "delete-review") return { success: true };
       if (action === "update-order") return { success: true };
       throw new Error("Unsupported local admin action");
     }
@@ -330,7 +337,8 @@ export default function Admin() {
         inventory: result.inventory || [],
         categories: result.categories || [],
         coupons: result.coupons || [],
-        journals: result.journals || [],
+        journals: buildEditableJournalRows(result.journals || []),
+        reviews: result.reviews || [],
         siteSettings: normalizedSiteSettings,
       });
       setSiteSettingsForm(normalizedSiteSettings);
@@ -415,7 +423,7 @@ export default function Admin() {
     localStorage.removeItem("ks_admin_token");
     localStorage.removeItem("ks_admin_user");
     setAdminToken(null);
-    setData({ orders: [], products: [], customers: [], customerActivities: [], inventory: [], categories: [], coupons: [], journals: [], siteSettings: defaultSiteSettings });
+    setData({ orders: [], products: [], customers: [], customerActivities: [], inventory: [], categories: [], coupons: [], journals: [], reviews: [], siteSettings: defaultSiteSettings });
   };
 
   const stats = useMemo(() => calculateAdminStats(data), [data]);
@@ -437,6 +445,14 @@ export default function Admin() {
   const filteredJournals = (data.journals || []).filter((journal: any) => {
     const q = query.toLowerCase();
     return !q || journal.title?.toLowerCase().includes(q) || journal.slug?.toLowerCase().includes(q) || journal.category?.toLowerCase().includes(q);
+  });
+  const filteredReviews = (data.reviews || []).filter((review: any) => {
+    const q = query.toLowerCase();
+    return !q
+      || review.customer_name?.toLowerCase().includes(q)
+      || review.product_handle?.toLowerCase().includes(q)
+      || review.title?.toLowerCase().includes(q)
+      || review.content?.toLowerCase().includes(q);
   });
   const categoryOptions = data.categories.length ? data.categories : [
     { slug: "sarees", name: "Sarees" },
@@ -935,6 +951,10 @@ export default function Admin() {
   };
 
   const deleteJournal = async (journal: any) => {
+    if (!journal.id) {
+      toast.error("Save this legacy journal once before deleting it");
+      return;
+    }
     try {
       await api({ method: "POST", body: { action: "delete-journal", journalId: journal.id } });
       await broadcastCommerceChange(supabase, { action: "journal-deleted", table: "journal_articles", savedAt: new Date().toISOString() });
@@ -942,6 +962,41 @@ export default function Admin() {
       fetchAdminData();
     } catch (error) {
       toast.error("Unable to delete journal", { description: error instanceof Error ? error.message : undefined });
+    }
+  };
+
+  const productTitleForReview = (review: any) => {
+    const product = (data.products || []).find((item: any) => item.handle === review.product_handle || item.id === review.product_id);
+    return product?.title || review.product_handle || "Product";
+  };
+
+  const copyAddToCartUrl = async (product: any) => {
+    const url = buildAddToCartUrl(product.handle, window.location.origin);
+    await navigator.clipboard.writeText(url);
+    toast.success("Add-to-cart URL copied", { description: url });
+  };
+
+  const saveReviewReply = async (review: any) => {
+    try {
+      const reply = reviewReplies[review.id] ?? review.admin_reply ?? "";
+      await api({ method: "POST", body: { action: "reply-review", reviewId: review.id, reply } });
+      await broadcastCommerceChange(supabase, { action: "review-replied", table: "reviews", reviewId: review.id });
+      toast.success(reply.trim() ? "Reply saved" : "Reply removed");
+      fetchAdminData();
+    } catch (error) {
+      toast.error("Unable to save reply", { description: error instanceof Error ? error.message : undefined });
+    }
+  };
+
+  const deleteReview = async (review: any) => {
+    if (!window.confirm("Delete this review?")) return;
+    try {
+      await api({ method: "POST", body: { action: "delete-review", reviewId: review.id } });
+      await broadcastCommerceChange(supabase, { action: "review-deleted", table: "reviews", reviewId: review.id });
+      toast.success("Review deleted");
+      fetchAdminData();
+    } catch (error) {
+      toast.error("Unable to delete review", { description: error instanceof Error ? error.message : undefined });
     }
   };
 
@@ -1109,7 +1164,12 @@ export default function Admin() {
                             <td className="font-price">{formatPrice(String(product.price), "INR")}</td>
                             <td>{(product.product_variants || []).reduce((sum: number, variant: any) => sum + Number(variant.inventory_qty || 0), 0)}</td>
                             <td><Badge className={statusBadge(product.status)}>{product.status}</Badge></td>
-                            <td><Button size="sm" variant="outline" onClick={() => editProduct(product)}>Edit</Button></td>
+                            <td className="flex gap-2 justify-end py-2">
+                              <Button size="sm" variant="outline" onClick={() => editProduct(product)}>Edit</Button>
+                              <Button size="sm" variant="outline" onClick={() => copyAddToCartUrl(product)} aria-label={`Copy add-to-cart URL for ${product.title}`}>
+                                <Link2 className="w-4 h-4" />
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1274,6 +1334,61 @@ export default function Admin() {
                     )}
                   </div>
                 ))}
+              </div>
+            </Panel>
+          )}
+
+          {section === "reviews" && (
+            <Panel title={`Reviews (${filteredReviews.length})`}>
+              <div className="space-y-4">
+                {filteredReviews.length ? filteredReviews.map((review: any) => (
+                  <div key={review.id} className="border border-border rounded-sm p-4 grid lg:grid-cols-[1fr_360px] gap-4">
+                    <div className="space-y-3 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{Number(review.rating || 0)}/5</Badge>
+                        {review.is_verified_purchase && <Badge className="bg-green-100 text-green-800 border-green-200">Verified Purchase</Badge>}
+                        {!review.is_approved && <Badge className="bg-amber-100 text-amber-800 border-amber-200">Hidden</Badge>}
+                      </div>
+                      <div>
+                        <p className="font-heading text-lg">{review.title || "Review"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {productTitleForReview(review)} - {review.customer_name || "Customer"} - {new Date(review.created_at).toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                      <p className="text-sm font-body text-foreground/80 break-words">{review.content}</p>
+                      {review.customer_email && <p className="text-xs text-muted-foreground">{review.customer_email}</p>}
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Admin Reply</Label>
+                        <Textarea
+                          value={reviewReplies[review.id] ?? review.admin_reply ?? ""}
+                          onChange={(event) => setReviewReplies({ ...reviewReplies, [review.id]: event.target.value })}
+                          rows={5}
+                          maxLength={2000}
+                          placeholder="Write a public response"
+                        />
+                        {review.admin_replied_at && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Last replied {new Date(review.admin_replied_at).toLocaleString("en-IN")}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" variant="outline" onClick={() => deleteReview(review)}>
+                          <Trash2 className="w-4 h-4 mr-2" />Delete
+                        </Button>
+                        <Button size="sm" onClick={() => saveReviewReply(review)}>
+                          <Save className="w-4 h-4 mr-2" />Save Reply
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="text-sm text-muted-foreground border border-border rounded-sm p-6 text-center">
+                    Verified purchase reviews will appear here.
+                  </div>
+                )}
               </div>
             </Panel>
           )}
@@ -1453,7 +1568,7 @@ export default function Admin() {
                           <td>{journal.published_at ? new Date(journal.published_at).toLocaleDateString("en-IN") : "-"}</td>
                           <td className="flex gap-2 justify-end py-2">
                             <Button size="sm" variant="outline" onClick={() => editJournal(journal)}>Edit</Button>
-                            <Button size="sm" variant="outline" onClick={() => deleteJournal(journal)} aria-label={`Delete ${journal.title}`}>
+                            <Button size="sm" variant="outline" onClick={() => deleteJournal(journal)} aria-label={`Delete ${journal.title}`} disabled={!journal.id}>
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </td>

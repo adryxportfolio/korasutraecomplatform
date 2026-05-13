@@ -134,6 +134,7 @@ export function adminRowToShopifyProduct(row: any): ShopifyProduct {
               currencyCode: "INR",
             },
             availableForSale: !variant.track_inventory || Number(variant.inventory_qty || 0) > 0,
+            quantityAvailable: variant.track_inventory ? Number(variant.inventory_qty || 0) : null,
             selectedOptions: [
               variant.option1_name && variant.option1_value ? { name: variant.option1_name, value: variant.option1_value } : null,
               variant.option2_name && variant.option2_value ? { name: variant.option2_name, value: variant.option2_value } : null,

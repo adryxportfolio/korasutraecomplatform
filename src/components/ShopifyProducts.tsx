@@ -50,7 +50,7 @@ export function ShopifyProducts() {
       variantTitle: variant.title,
       price: variant.price,
       quantity: 1,
-      maxQuantity: 1,
+      maxQuantity: variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1,
       selectedOptions: variant.selectedOptions || [],
     });
 
@@ -175,6 +175,7 @@ export function ShopifyProducts() {
                     {product.node.variants.edges[0]?.node && (
                       <StockIndicator
                         availableForSale={product.node.variants.edges[0].node.availableForSale}
+                        quantityAvailable={product.node.variants.edges[0].node.quantityAvailable}
                       />
                     )}
                   </div>

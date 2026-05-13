@@ -44,6 +44,7 @@ export interface ShopifyProduct {
             currencyCode: string;
           };
           availableForSale: boolean;
+          quantityAvailable: number | null;
           selectedOptions: Array<{
             name: string;
             value: string;
@@ -169,6 +170,7 @@ function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
               currencyCode: "INR",
             },
             availableForSale: !variant.track_inventory || variant.inventory_qty > 0,
+            quantityAvailable: variant.track_inventory ? Number(variant.inventory_qty || 0) : null,
             selectedOptions: selectedOptionsForVariant(variant),
           },
         })),

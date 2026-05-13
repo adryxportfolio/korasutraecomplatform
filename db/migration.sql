@@ -269,6 +269,8 @@ create table public.reviews (
   id                    uuid primary key default gen_random_uuid(),
   product_id            text not null,
   product_handle        text not null,
+  customer_id           uuid references public.customers(id) on delete set null,
+  order_item_id         uuid references public.order_items(id) on delete set null,
   customer_name         text not null,
   customer_email        text,
   rating                integer not null check (rating between 1 and 5),
@@ -277,10 +279,15 @@ create table public.reviews (
   is_verified_purchase  boolean not null default false,
   is_approved           boolean not null default true,
   helpful_count         integer not null default 0,
+  admin_reply           text check (admin_reply is null or length(admin_reply) <= 2000),
+  admin_reply_author    text,
+  admin_replied_at      timestamptz,
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now()
 );
 create index idx_reviews_handle on public.reviews(product_handle);
+create index idx_reviews_customer_product on public.reviews(customer_id, product_id);
+create index idx_reviews_order_item on public.reviews(order_item_id);
 
 -- =====================================================================
 -- TRIGGERS — updated_at auto-touch
@@ -377,6 +384,7 @@ returns table (
   id uuid, product_id text, product_handle text, customer_name text,
   rating integer, title text, content text,
   is_verified_purchase boolean, is_approved boolean, helpful_count integer,
+  admin_reply text, admin_reply_author text, admin_replied_at timestamptz,
   created_at timestamptz, updated_at timestamptz
 )
 language plpgsql
@@ -388,6 +396,7 @@ begin
   select r.id, r.product_id, r.product_handle, r.customer_name,
          r.rating, r.title, r.content,
          r.is_verified_purchase, r.is_approved, r.helpful_count,
+         r.admin_reply, r.admin_reply_author, r.admin_replied_at,
          r.created_at, r.updated_at
   from public.reviews r
   where r.is_approved = true
@@ -535,15 +544,8 @@ create policy "Admins view all order items" on public.order_items
 -- Reviews: existing pattern (RPC for reads, validated INSERT)
 create policy "Block direct SELECT - use get_approved_reviews RPC" on public.reviews
   for select using (false);
-create policy "Anyone can submit valid reviews" on public.reviews
-  for insert with check (
-    product_id is not null and length(product_id) > 0
-    and product_handle is not null and length(product_handle) > 0
-    and customer_name is not null and length(customer_name) between 1 and 100
-    and rating between 1 and 5
-    and content is not null and length(content) between 1 and 2000
-    and (title is null or length(title) <= 150)
-  );
+create policy "Block direct INSERT - use product-review function" on public.reviews
+  for insert with check (false);
 
 -- =====================================================================
 -- REALTIME — orders & order_items for live admin dashboard

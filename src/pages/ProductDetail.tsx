@@ -489,7 +489,7 @@ export default function ProductDetail() {
         variantTitle: variant.title,
         price: variant.price,
         quantity: 1,
-        maxQuantity: 1,
+        maxQuantity: variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1,
         selectedOptions: variant.selectedOptions,
       });
       toast.success('Opening secure checkout...', { position: 'top-center' });
@@ -524,7 +524,7 @@ export default function ProductDetail() {
       variantTitle: variant.title,
       price: variant.price,
       quantity: 1,
-      maxQuantity: 1, // Sarees are typically one-of-a-kind
+      maxQuantity: variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1,
       selectedOptions: variant.selectedOptions,
     });
     
@@ -760,7 +760,10 @@ export default function ProductDetail() {
                 {currentVariant && (
                   <StockStatus 
                     availableForSale={currentVariant.availableForSale}
+                    quantityAvailable={currentVariant.quantityAvailable}
+                    showQuantity
                     size="sm"
+                    className="shadow-sm ring-1 ring-current/10"
                   />
                 )}
               </div>

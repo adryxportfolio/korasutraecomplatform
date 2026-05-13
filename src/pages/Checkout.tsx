@@ -270,7 +270,7 @@ export default function Checkout() {
       description: data.emailResults?.customer?.sent ? "Receipt sent to your email." : undefined,
       position: "top-center",
     });
-    navigate(`/order-tracking/${data.order_number}`);
+    navigate(`/thank-you/${data.order_number}`);
   };
 
   const submitOrder = async () => {

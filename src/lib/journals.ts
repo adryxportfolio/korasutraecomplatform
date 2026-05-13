@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from "@/integrations/supabase/client";
 import { journalArticles as fallbackJournalArticles, type JournalArticle } from "@/data/journals";
+export { buildEditableJournalRows } from "@/lib/journalAdminRows";
 
 export type LiveJournalArticle = JournalArticle & {
   id?: string;
