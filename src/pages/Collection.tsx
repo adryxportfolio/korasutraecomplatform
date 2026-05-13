@@ -17,6 +17,7 @@ import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
+import { buildGa4CartPayload, trackGa4EcommerceEvent } from '@/lib/ga4Ecommerce';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -476,7 +477,7 @@ export default function Collection() {
       return;
     }
 
-    addItem({
+    const cartItem = {
       product,
       variantId: variant.id,
       variantTitle: variant.title,
@@ -484,7 +485,9 @@ export default function Collection() {
       quantity: 1,
       maxQuantity: 1, // Sarees are typically one-of-a-kind
       selectedOptions: variant.selectedOptions || [],
-    });
+    };
+    addItem(cartItem);
+    trackGa4EcommerceEvent('add_to_cart', buildGa4CartPayload([cartItem]));
 
     toast.success('Added to cart', {
       description: product.node.title,

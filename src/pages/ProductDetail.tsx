@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
@@ -28,6 +28,11 @@ import { SecureCheckoutBadges } from '@/components/SecureCheckoutBadges';
 import { supabase } from '@/integrations/supabase/client';
 import { buildProductFAQs } from '@/data/faqs';
 import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
+import {
+  buildGa4CartPayload,
+  buildGa4ItemFromVariant,
+  trackGa4EcommerceEvent,
+} from '@/lib/ga4Ecommerce';
 
 // Extract fabric type from product title
 function extractFabricFromTitle(title: string): string {
@@ -407,6 +412,7 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  const viewedItemKey = useRef("");
 
   const addItem = useCartStore(state => state.addItem);
   const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlistStore();
@@ -463,6 +469,22 @@ export default function ProductDetail() {
     return product?.variants.edges.find(({ node }) => node.id === selectedVariant)?.node;
   };
 
+  const currentVariant = getCurrentVariant();
+
+  useEffect(() => {
+    if (!product || !currentVariant) return;
+    const viewKey = `${product.id}:${currentVariant.id}`;
+    if (viewedItemKey.current === viewKey) return;
+    viewedItemKey.current = viewKey;
+
+    const value = Number.parseFloat(currentVariant.price.amount) || 0;
+    trackGa4EcommerceEvent("view_item", {
+      currency: currentVariant.price.currencyCode,
+      value,
+      items: [buildGa4ItemFromVariant(product, currentVariant)],
+    });
+  }, [product, currentVariant]);
+
   const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   const handleBuyNow = async () => {
@@ -483,7 +505,7 @@ export default function ProductDetail() {
 
     setIsCheckingOut(true);
     try {
-      addItem({
+      const cartItem = {
         product: { node: product },
         variantId: variant.id,
         variantTitle: variant.title,
@@ -491,7 +513,9 @@ export default function ProductDetail() {
         quantity: 1,
         maxQuantity: variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1,
         selectedOptions: variant.selectedOptions,
-      });
+      };
+      addItem(cartItem);
+      trackGa4EcommerceEvent("add_to_cart", buildGa4CartPayload([cartItem]));
       toast.success('Opening secure checkout...', { position: 'top-center' });
       navigate('/checkout');
     } catch (error) {
@@ -518,7 +542,7 @@ export default function ProductDetail() {
       return;
     }
 
-    addItem({
+    const cartItem = {
       product: { node: product },
       variantId: variant.id,
       variantTitle: variant.title,
@@ -526,7 +550,9 @@ export default function ProductDetail() {
       quantity: 1,
       maxQuantity: variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1,
       selectedOptions: variant.selectedOptions,
-    });
+    };
+    addItem(cartItem);
+    trackGa4EcommerceEvent("add_to_cart", buildGa4CartPayload([cartItem]));
     
     toast.success('Added to cart!', { 
       description: product.title,
@@ -604,7 +630,6 @@ export default function ProductDetail() {
     );
   }
 
-  const currentVariant = getCurrentVariant();
   const images = product.images.edges;
   const videos = product.videos?.edges || [];
   const productDetails = parseProductDetails(product.title, product.description);

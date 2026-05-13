@@ -10,6 +10,7 @@ import { formatPrice } from '@/lib/shopify';
 import { toTitleCase } from '@/lib/titleCase';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { buildGa4CartPayload, trackGa4EcommerceEvent } from '@/lib/ga4Ecommerce';
 
 export default function Wishlist() {
   const { items, removeItem, clearWishlist } = useWishlistStore();
@@ -19,7 +20,7 @@ export default function Wishlist() {
     const variant = item.node.variants.edges[0]?.node;
     if (!variant) return;
 
-    addToCart({
+    const cartItem = {
       product: item,
       variantId: variant.id,
       variantTitle: variant.title,
@@ -27,7 +28,9 @@ export default function Wishlist() {
       quantity: 1,
       maxQuantity: 1, // Sarees are typically one-of-a-kind
       selectedOptions: variant.selectedOptions || [],
-    });
+    };
+    addToCart(cartItem);
+    trackGa4EcommerceEvent('add_to_cart', buildGa4CartPayload([cartItem]));
 
     toast.success('Added to cart', {
       description: item.node.title,

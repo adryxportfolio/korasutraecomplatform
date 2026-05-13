@@ -10,6 +10,7 @@ import { StockIndicator } from '@/components/StockStatus';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
+import { buildGa4CartPayload, trackGa4EcommerceEvent } from '@/lib/ga4Ecommerce';
 
 const PRODUCTS_TO_SHOW = 8;
 
@@ -44,7 +45,7 @@ export function ShopifyProducts() {
       return;
     }
 
-    addItem({
+    const cartItem = {
       product,
       variantId: variant.id,
       variantTitle: variant.title,
@@ -52,7 +53,9 @@ export function ShopifyProducts() {
       quantity: 1,
       maxQuantity: variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1,
       selectedOptions: variant.selectedOptions || [],
-    });
+    };
+    addItem(cartItem);
+    trackGa4EcommerceEvent('add_to_cart', buildGa4CartPayload([cartItem]));
 
     toast.success('Added to cart', {
       description: product.node.title,

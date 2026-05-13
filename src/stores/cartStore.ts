@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { ShopifyProduct } from '@/lib/shopify';
+import { nextCartOwnerState } from '@/lib/cartOwner';
 
 export interface CartItem {
   product: ShopifyProduct;
@@ -22,6 +23,7 @@ interface CartStore {
   items: CartItem[];
   cartId: string | null;
   checkoutUrl: string | null;
+  cartOwnerKey: string | null;
   isLoading: boolean;
 
   // Actions
@@ -32,6 +34,7 @@ interface CartStore {
   setCartId: (cartId: string) => void;
   setCheckoutUrl: (url: string) => void;
   setLoading: (loading: boolean) => void;
+  syncCartOwner: (ownerKey: string | null) => void;
   createCheckout: () => Promise<string | null>;
   getTotalItems: () => number;
   getTotalPrice: () => number;
@@ -43,6 +46,7 @@ export const useCartStore = create<CartStore>()(
       items: [],
       cartId: null,
       checkoutUrl: null,
+      cartOwnerKey: null,
       isLoading: false,
 
       addItem: (item) => {
@@ -97,6 +101,9 @@ export const useCartStore = create<CartStore>()(
       setCartId: (cartId) => set({ cartId }),
       setCheckoutUrl: (checkoutUrl) => set({ checkoutUrl }),
       setLoading: (isLoading) => set({ isLoading }),
+      syncCartOwner: (ownerKey) => {
+        set((state) => nextCartOwnerState(state, ownerKey));
+      },
 
       createCheckout: async () => {
         const { items, setLoading, setCheckoutUrl } = get();

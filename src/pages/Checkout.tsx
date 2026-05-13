@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
@@ -25,6 +25,7 @@ import { buildCartSnapshotActivityPayload, trackCustomerActivity } from "@/lib/c
 import { supabase } from "@/integrations/supabase/client";
 import { subscribeToStorefrontRealtime } from "@/lib/realtimeTables";
 import { toast } from "sonner";
+import { buildGa4CartPayload, trackGa4EcommerceEvent } from "@/lib/ga4Ecommerce";
 
 declare global {
   interface Window {
@@ -121,10 +122,17 @@ export default function Checkout() {
     quantity: item.quantity,
   })), [items]);
   const cartSignature = JSON.stringify(cartLines);
+  const beginCheckoutSignature = useRef("");
 
   useEffect(() => {
     setAppliedCoupon(null);
   }, [cartSignature]);
+
+  useEffect(() => {
+    if (items.length === 0 || beginCheckoutSignature.current === cartSignature) return;
+    beginCheckoutSignature.current = cartSignature;
+    trackGa4EcommerceEvent("begin_checkout", buildGa4CartPayload(items));
+  }, [cartSignature, items]);
 
   useEffect(() => {
     if (!customerSessionToken || items.length === 0) return;
@@ -265,6 +273,13 @@ export default function Checkout() {
       couponCode: appliedCoupon?.coupon?.code || couponCode,
       ...paymentPayload,
     });
+    trackGa4EcommerceEvent("purchase", buildGa4CartPayload(items, {
+      transaction_id: data.order_number,
+      value: total,
+      coupon: appliedCoupon?.coupon?.code || undefined,
+      shipping: codSurcharge,
+      tax: 0,
+    }));
     clearCart();
     toast.success(`Order ${data.order_number} placed`, {
       description: data.emailResults?.customer?.sent ? "Receipt sent to your email." : undefined,
@@ -289,6 +304,12 @@ export default function Checkout() {
 
     setIsPlacingOrder(true);
     try {
+      trackGa4EcommerceEvent("add_payment_info", buildGa4CartPayload(items, {
+        payment_type: paymentMethod === "cod" ? "Cash on Delivery" : "Razorpay",
+        coupon: appliedCoupon?.coupon?.code || undefined,
+        value: total,
+      }));
+
       if (paymentMethod === "cod") {
         await placeOrder();
         return;

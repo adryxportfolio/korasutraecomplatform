@@ -9,6 +9,7 @@ import { fetchProductByHandle } from "@/lib/shopify";
 import { parseAddToCartParams } from "@/lib/addToCartUrl";
 import { useCartStore } from "@/stores/cartStore";
 import { toast } from "sonner";
+import { buildGa4CartPayload, trackGa4EcommerceEvent } from "@/lib/ga4Ecommerce";
 
 export default function AddToCartRedirect() {
   const { handle } = useParams<{ handle: string }>();
@@ -49,7 +50,7 @@ export default function AddToCartRedirect() {
       }
 
       const maxQuantity = variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1;
-      addItem({
+      const cartItem = {
         product: { node: product },
         variantId: variant.id,
         variantTitle: variant.title,
@@ -57,7 +58,9 @@ export default function AddToCartRedirect() {
         quantity: Math.min(params.quantity, maxQuantity),
         maxQuantity,
         selectedOptions: variant.selectedOptions,
-      });
+      };
+      addItem(cartItem);
+      trackGa4EcommerceEvent("add_to_cart", buildGa4CartPayload([cartItem]));
 
       toast.success("Added to cart", { description: product.title, position: "top-center" });
       navigate(params.checkout ? "/checkout" : `/products/${product.handle}`, { replace: true });

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Search, ChevronDown, ChevronRight, Heart, Check } from 'lucide-react';
+import { Menu, X, Search, ChevronDown, ChevronRight, Heart, Check, ShoppingBag } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { koraSutraLogoUrl } from '@/lib/brandAssets';
-import { CartDrawer } from '@/components/CartDrawer';
 import { MegaMenu } from '@/components/MegaMenu';
 import { AccountMenu } from '@/components/AccountMenu';
 import { useWishlistStore } from '@/stores/wishlistStore';
+import { useCartStore } from '@/stores/cartStore';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { defaultSiteSettings, type SiteSettings } from '@/lib/siteSettings';
@@ -157,6 +157,7 @@ export function Navbar({ settings = defaultSiteSettings }: { settings?: SiteSett
   const [selectedOccasions, setSelectedOccasions] = useState<string[]>([]);
   const navigate = useNavigate();
   const wishlistCount = useWishlistStore(state => state.getTotalItems());
+  const cartCount = useCartStore(state => state.items.reduce((sum, item) => sum + item.quantity, 0));
   const navbarSettings = settings.navbar;
   const enabledNavLinks = navbarSettings.navLinks.filter((link) => link.enabled);
   useEffect(() => {
@@ -328,7 +329,14 @@ export function Navbar({ settings = defaultSiteSettings }: { settings?: SiteSett
               </button>
               
               {/* Cart */}
-              <CartDrawer />
+              <Link to="/cart" className="p-2 hover:bg-secondary/50 rounded-full transition-colors relative" aria-label="Open secure cart">
+                <ShoppingBag className="w-6 h-6" aria-hidden="true" />
+                {cartCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs bg-accent text-accent-foreground">
+                    {cartCount}
+                  </Badge>
+                )}
+              </Link>
             </div>
           </div>
 

@@ -28,6 +28,8 @@ import Checkout from "./pages/Checkout";
 import AddToCartRedirect from "./pages/AddToCartRedirect";
 import ThankYou from "./pages/ThankYou";
 import { CustomerActivityTracker } from "./components/CustomerActivityTracker";
+import { CartOwnerSync } from "./components/CartOwnerSync";
+import Cart from "./pages/Cart";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +41,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <ScrollToTop />
+          <CartOwnerSync />
           <CustomerActivityTracker />
           <Routes>
             <Route path="/" element={<Index />} />
@@ -57,6 +60,7 @@ const App = () => (
             <Route path="/legal" element={<Legal />} />
             <Route path="/order-tracking" element={<OrderTracking />} />
             <Route path="/order-tracking/:orderNumber" element={<OrderTracking />} />
+            <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/cart/add/:handle" element={<AddToCartRedirect />} />
             <Route path="/thank-you/:orderNumber" element={<ThankYou />} />
