@@ -156,24 +156,26 @@ function extractLength(title: string, description: string): string | null {
   return null;
 }
 
+type ProductDetailMetadata = Pick<ShopifyProduct['node'], 'fabric' | 'technique' | 'color' | 'hasBlousePiece'>;
+
 // Parse product description to extract structured details
-function parseProductDetails(title: string, description: string): Record<string, string | boolean | null> {
+function parseProductDetails(title: string, description: string, metadata: ProductDetailMetadata = {}): Record<string, string | boolean | null> {
   const details: Record<string, string | boolean | null> = {};
   
   // Extract Fabric from title
-  details['Fabric'] = extractFabricFromTitle(title);
+  details['Fabric'] = metadata.fabric || extractFabricFromTitle(title);
   
   // Extract Color from title
-  details['Colour'] = extractColorFromTitle(title);
+  details['Colour'] = metadata.color || extractColorFromTitle(title);
   
   // Extract Pattern
-  details['Pattern'] = extractPatternFromTitle(title, description);
+  details['Pattern'] = metadata.technique || extractPatternFromTitle(title, description);
   
   // Extract Length from description - derived from catalog input
   details['Length'] = extractLength(title, description);
   
   // Blouse Piece - derived from catalog input, null if not specified
-  details['Blouse Piece'] = hasBlousePiece(title, description);
+  details['Blouse Piece'] = typeof metadata.hasBlousePiece === 'boolean' ? metadata.hasBlousePiece : hasBlousePiece(title, description);
   
   // Always set Wash Care to Dry clean
   details['Wash Care'] = 'Dry clean';
@@ -632,7 +634,7 @@ export default function ProductDetail() {
 
   const images = product.images.edges;
   const videos = product.videos?.edges || [];
-  const productDetails = parseProductDetails(product.title, product.description);
+  const productDetails = parseProductDetails(product.title, product.description, product);
   const productFAQs = buildProductFAQs(
     toTitleCase(product.title),
     String(productDetails['Fabric'] || ''),
@@ -775,7 +777,7 @@ export default function ProductDetail() {
                     <p className="text-xl md:text-2xl font-heading" style={{ fontFamily: 'var(--font-price)' }}>
                       {currentVariant && formatPrice(currentVariant.price.amount, currentVariant.price.currencyCode)}
                     </p>
-                    <p className="text-xs text-muted-foreground">MRP Inclusive of all taxes</p>
+                    <p className="text-xs text-muted-foreground">Excluding GST</p>
                   </div>
                   <span className="px-3 py-1 bg-foreground text-background text-xs font-body uppercase tracking-wide">
                     Top Rated

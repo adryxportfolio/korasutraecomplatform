@@ -106,7 +106,12 @@ export function adminRowToShopifyProduct(row: any): ShopifyProduct {
       title: row.title,
       description: row.description || "",
       handle: row.handle,
-      tags: [row.fabric, row.technique, row.color, ...(row.tags || []), row.has_blouse_piece ? "with blouse" : null].filter(Boolean),
+      fabric: row.fabric,
+      technique: row.technique,
+      color: row.color,
+      hasBlousePiece: Boolean(row.has_blouse_piece),
+      category: row.category || null,
+      tags: [row.fabric, row.technique, row.color, row.category?.slug, row.category?.name, ...(row.tags || []), row.has_blouse_piece ? "with blouse" : null].filter(Boolean),
       priceRange: {
         minVariantPrice: {
           amount: Number(minPrice || row.price || 0).toFixed(2),
@@ -228,7 +233,7 @@ export async function loadLocalShopifyProducts(first = 100, query?: string): Pro
   const filtered = rows.filter((product) => {
     if (product.status !== "active") return false;
     if (!normalizedQuery) return true;
-    return textMatchesCatalogQuery(`${product.title} ${product.description} ${product.fabric} ${product.technique} ${product.color}`, product.tags, normalizedQuery);
+    return textMatchesCatalogQuery(`${product.title} ${product.description} ${product.fabric} ${product.technique} ${product.color} ${product.category?.slug || ""} ${product.category?.name || ""}`, product.tags, normalizedQuery);
   });
   return filtered.slice(0, first).map(adminRowToShopifyProduct);
 }

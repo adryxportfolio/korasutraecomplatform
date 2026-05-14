@@ -10,6 +10,14 @@ export interface ShopifyProduct {
     description: string;
     handle: string;
     tags?: string[];
+    fabric?: string | null;
+    technique?: string | null;
+    color?: string | null;
+    hasBlousePiece?: boolean;
+    category?: {
+      slug: string | null;
+      name: string | null;
+    } | null;
     priceRange: {
       minVariantPrice: {
         amount: string;
@@ -70,6 +78,7 @@ type CatalogProductRow = {
   technique: string | null;
   color: string | null;
   has_blouse_piece: boolean;
+  category?: { slug: string | null; name: string | null } | null;
   product_images?: Array<{ url: string; alt_text: string | null; position: number }>;
   product_videos?: Array<{ url: string; alt_text: string | null; position: number; content_type: string | null }>;
   product_variants?: Array<{
@@ -129,11 +138,18 @@ function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
       title: row.title,
       description: row.description || "",
       handle: row.handle,
+      fabric: row.fabric,
+      technique: row.technique,
+      color: row.color,
+      hasBlousePiece: Boolean(row.has_blouse_piece),
+      category: row.category || null,
       tags: [
         ...(row.tags || []),
         row.fabric,
         row.technique,
         row.color,
+        row.category?.slug,
+        row.category?.name,
         row.has_blouse_piece ? "with blouse" : null,
       ].filter(Boolean) as string[],
       priceRange: {
@@ -181,7 +197,7 @@ function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
 }
 
 function baseProductSelect() {
-  return "id, title, description, handle, tags, price, fabric, technique, color, has_blouse_piece, product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value, price, inventory_qty, track_inventory, position)";
+  return "id, title, description, handle, tags, price, fabric, technique, color, has_blouse_piece, category:categories(slug, name), product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value, price, inventory_qty, track_inventory, position)";
 }
 
 export async function fetchProducts(first: number = 20, query?: string): Promise<ShopifyProduct[]> {
@@ -198,7 +214,7 @@ export async function fetchProducts(first: number = 20, query?: string): Promise
     if (error) throw error;
     if (!data?.length) return loadLocalShopifyProducts(first, query);
     const rows = query?.trim()
-      ? data.filter((row: CatalogProductRow) => textMatchesCatalogQuery(`${row.title} ${row.description || ""} ${row.fabric || ""} ${row.technique || ""} ${row.color || ""}`, row.tags || [], query))
+      ? data.filter((row: CatalogProductRow) => textMatchesCatalogQuery(`${row.title} ${row.description || ""} ${row.fabric || ""} ${row.technique || ""} ${row.color || ""} ${row.category?.slug || ""} ${row.category?.name || ""}`, row.tags || [], query))
       : data;
     return rows.slice(0, first).map(mapCatalogProduct);
   } catch (error) {

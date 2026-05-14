@@ -72,11 +72,13 @@ import {
 } from "@/lib/siteSettings";
 import { buildEditableJournalRows } from "@/lib/journalAdminRows";
 import { buildAddToCartUrl } from "@/lib/addToCartUrl";
+import { buildAdminProductImages, type AdminProductImageInput } from "@/lib/adminProductImages";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
 
 type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "reviews" | "customers" | "coupons" | "sales" | "journals" | "settings";
+type PendingProductImageUpload = { dataUrl: string; fileName: string; contentType: string };
 
 const navItems: Array<{ id: AdminSection; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -173,6 +175,7 @@ export default function Admin() {
     imageDataUrl: "",
     imageFileName: "",
     imageContentType: "",
+    imageUploads: [] as PendingProductImageUpload[],
     videoUrl: "",
     videoDataUrl: "",
     videoFileName: "",
@@ -231,7 +234,7 @@ export default function Admin() {
     publishedAt: "",
   });
 
-  const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
+  const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", imageUploads: [], videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
   const resetCouponForm = () => setCouponForm({ id: "", code: "", description: "", status: "active", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscountCap: "", usageLimitTotal: "", usageLimitPerCustomer: "", firstOrderOnly: false, startAt: "", endAt: "", neverExpires: false, appliesTo: "all", includedProductIds: "", includedCategorySlugs: "", includedTags: "", excludedProductIds: "", excludedCategorySlugs: "", excludeSaleItems: false, canCombineWithCoupons: false, canCombineWithSalePrices: true, autoApply: false, displayOnWebsite: false, priority: "0", buyQuantity: "", getQuantity: "" });
   const resetJournalForm = () => setJournalForm({ id: "", title: "", slug: "", excerpt: "", content: "", imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", category: "Journal", author: "Kora Sutra", readTime: "3 min read", keywords: "", seoTitle: "", seoDescription: "", status: "draft", publishedAt: "" });
   const isLocalAdmin = canUseLocalAdminMode(adminToken, LOCAL_ADMIN_FALLBACK_ENABLED);
@@ -458,6 +461,10 @@ export default function Admin() {
     { slug: "sarees", name: "Sarees" },
     { slug: "blouses", name: "Blouses" },
   ];
+  const productImagePreviews = [
+    ...productForm.imageUrl.split(/\r?\n/).map((url) => url.trim()).filter(Boolean),
+    ...productForm.imageUploads.map((image) => image.dataUrl),
+  ].slice(0, 12);
 
   const toggleCatalogSelection = (group: CatalogTaxonomyGroup, slug: string) => {
     const current = productForm.catalogSelection[group];
@@ -496,12 +503,51 @@ export default function Admin() {
     return { url: result.url, path: result.path || "", contentType: result.contentType || (media === "image" ? productForm.imageContentType : productForm.videoContentType) };
   };
 
+  const uploadProductImages = async (): Promise<AdminProductImageInput[]> => {
+    if (!productForm.imageUploads.length) return [];
+    if (isLocalAdmin) {
+      return productForm.imageUploads.map((image) => ({
+        url: image.dataUrl,
+        altText: productForm.title,
+      }));
+    }
+    if (!adminToken) throw new Error("Missing admin token");
+
+    return Promise.all(productForm.imageUploads.map(async (image) => {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-upload-image`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": adminToken,
+        },
+        body: JSON.stringify({
+          dataUrl: image.dataUrl,
+          fileName: image.fileName,
+          contentType: image.contentType,
+          productHandle: productForm.handle || slugify(productForm.title),
+        }),
+      });
+      const result = await response.json().catch(() => ({ error: "Image upload failed" }));
+      if (!response.ok || result.error) throw new Error(result.error || "Image upload failed");
+      return {
+        url: result.url,
+        altText: productForm.title,
+        storageKey: result.path || "",
+      };
+    }));
+  };
+
   const saveProduct = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      const uploadedImage = await uploadProductMedia("image");
+      const uploadedImages = await uploadProductImages();
       const uploadedVideo = await uploadProductMedia("video");
-      if (uploadedImage.url.includes("shopify.com") || uploadedVideo.url.includes("shopify.com")) throw new Error("Please upload product media to Kora Sutra storage instead of Shopify CDN");
+      const productImages = buildAdminProductImages({
+        title: productForm.title,
+        imageUrls: productForm.imageUrl,
+        uploadedImages,
+      });
+      if (productImages.some((image) => image.url.includes("shopify.com")) || uploadedVideo.url.includes("shopify.com")) throw new Error("Please upload product media to Kora Sutra storage instead of Shopify CDN");
       const catalogTags = tagsForCatalogSelection(productForm.catalogSelection);
       const result = await api({
         method: "POST",
@@ -511,7 +557,7 @@ export default function Admin() {
             ...productForm,
             handle: productForm.handle || slugify(productForm.title),
             tags: catalogTags,
-            images: uploadedImage.url ? [{ url: uploadedImage.url, altText: productForm.title, storageKey: uploadedImage.path }] : [],
+            images: productImages,
             videos: uploadedVideo.url ? [{ url: uploadedVideo.url, altText: `${productForm.title} video`, contentType: uploadedVideo.contentType, storageKey: uploadedVideo.path }] : [],
             variant: {
               sku: productForm.sku || `KS-${Date.now()}`,
@@ -536,7 +582,11 @@ export default function Admin() {
 
   const editProduct = (product: any) => {
     const firstVariant = product.product_variants?.[0];
-    const firstImage = [...(product.product_images || [])].sort((a: any, b: any) => a.position - b.position)[0];
+    const imageUrls = [...(product.product_images || [])]
+      .sort((a: any, b: any) => a.position - b.position)
+      .map((image: any) => image.url)
+      .filter(Boolean)
+      .join("\n");
     const firstVideo = [...(product.product_videos || [])].sort((a: any, b: any) => a.position - b.position)[0];
     setProductForm({
       title: product.title || "",
@@ -551,10 +601,11 @@ export default function Admin() {
       color: product.color || "",
       status: product.status || "draft",
       hasBlousePiece: Boolean(product.has_blouse_piece),
-      imageUrl: firstImage?.url || "",
+      imageUrl: imageUrls,
       imageDataUrl: "",
       imageFileName: "",
       imageContentType: "",
+      imageUploads: [],
       videoUrl: firstVideo?.url || "",
       videoDataUrl: "",
       videoFileName: "",
@@ -587,6 +638,29 @@ export default function Admin() {
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const selectProductImageFiles = (files: FileList | null) => {
+    const imageFiles = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
+    if (!imageFiles.length) return;
+
+    Promise.all(imageFiles.map((file) => new Promise<PendingProductImageUpload>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({
+        dataUrl: String(reader.result || ""),
+        fileName: file.name,
+        contentType: file.type || "image/jpeg",
+      });
+      reader.onerror = () => reject(new Error(`Unable to read ${file.name}`));
+      reader.readAsDataURL(file);
+    }))).then((images) => {
+      setProductForm((current) => ({
+        ...current,
+        imageUploads: [...current.imageUploads, ...images].slice(0, 12),
+      }));
+    }).catch((error) => {
+      toast.error("Unable to read image files", { description: error instanceof Error ? error.message : undefined });
+    });
   };
 
   const selectSiteImage = (file: File | null, target: "desktop" | "mobile") => {
@@ -1148,7 +1222,7 @@ export default function Admin() {
                 <Panel title={`Products (${filteredProducts.length})`}>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead><tr className="text-left border-b border-border"><th className="py-2">Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr></thead>
+                      <thead><tr className="text-left border-b border-border"><th className="py-2">Product</th><th>Category</th><th>Price (excl. GST)</th><th>Stock</th><th>Status</th><th></th></tr></thead>
                       <tbody>
                         {filteredProducts.map((product: any) => (
                           <tr key={product.id} className="border-b border-border last:border-0">
@@ -1184,23 +1258,34 @@ export default function Admin() {
                     <Field label="Handle"><Input value={productForm.handle} onChange={(e) => setProductForm({ ...productForm, handle: slugify(e.target.value) })} required /></Field>
                     <Field label="Category"><Select value={productForm.categorySlug} onValueChange={(value) => setProductForm({ ...productForm, categorySlug: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{categoryOptions.map((category: any) => <SelectItem key={category.slug} value={category.slug}>{category.name}</SelectItem>)}</SelectContent></Select></Field>
                     <Field label="Status"><Select value={productForm.status} onValueChange={(value) => setProductForm({ ...productForm, status: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="draft">Draft</SelectItem><SelectItem value="archived">Archived</SelectItem></SelectContent></Select></Field>
-                    <Field label="Price"><Input value={productForm.price} onChange={(e) => setProductForm({ ...productForm, price: e.target.value })} required type="number" /></Field>
-                    <Field label="Compare-at Price"><Input value={productForm.compareAtPrice} onChange={(e) => setProductForm({ ...productForm, compareAtPrice: e.target.value })} type="number" /></Field>
+                    <Field label="Price (excluding GST)"><Input value={productForm.price} onChange={(e) => setProductForm({ ...productForm, price: e.target.value })} required type="number" /></Field>
+                    <Field label="Compare-at Price (excluding GST)"><Input value={productForm.compareAtPrice} onChange={(e) => setProductForm({ ...productForm, compareAtPrice: e.target.value })} type="number" /></Field>
                     <Field label="Fabric"><Input value={productForm.fabric} onChange={(e) => setProductForm({ ...productForm, fabric: e.target.value })} /></Field>
                     <Field label="Technique"><Input value={productForm.technique} onChange={(e) => setProductForm({ ...productForm, technique: e.target.value })} /></Field>
                     <Field label="Color"><Input value={productForm.color} onChange={(e) => setProductForm({ ...productForm, color: e.target.value })} /></Field>
                     <Field label="SKU"><Input value={productForm.sku} onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} /></Field>
                     <Field label="Inventory Qty"><Input value={productForm.inventoryQty} onChange={(e) => setProductForm({ ...productForm, inventoryQty: e.target.value })} type="number" /></Field>
-                    <Field label="Product image"><Input type="file" accept="image/*" onChange={(e) => selectMediaFile(e.target.files?.[0] || null, "image")} /></Field>
-                    <Field label="Stored image URL"><Input value={productForm.imageUrl} onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })} placeholder="Auto-filled after upload" /></Field>
+                    <Field label="Product photos"><Input type="file" accept="image/*" multiple onChange={(e) => selectProductImageFiles(e.target.files)} /></Field>
+                    <Field label="Stored image URLs"><Textarea value={productForm.imageUrl} onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })} placeholder="One image URL per line" rows={3} /></Field>
                     <Field label="Product video"><Input type="file" accept="video/*" onChange={(e) => selectMediaFile(e.target.files?.[0] || null, "video")} /></Field>
                     <Field label="Stored video URL"><Input value={productForm.videoUrl} onChange={(e) => setProductForm({ ...productForm, videoUrl: e.target.value })} placeholder="Auto-filled after upload" /></Field>
-                    {(productForm.imageDataUrl || productForm.imageUrl) && (
-                      <div className="flex items-center gap-3 border border-border rounded-sm p-3">
-                        <div className="w-16 h-20 bg-secondary/30 rounded-sm overflow-hidden">
-                          <img src={productForm.imageDataUrl || productForm.imageUrl} alt={productForm.title || "Product preview"} className="w-full h-full object-cover" />
+                    {productImagePreviews.length > 0 && (
+                      <div className="md:col-span-2 border border-border rounded-sm p-3 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs text-muted-foreground font-body">{productImagePreviews.length} photo{productImagePreviews.length !== 1 ? "s" : ""} linked to the product gallery.</p>
+                          {productForm.imageUploads.length > 0 && (
+                            <Button type="button" size="sm" variant="outline" onClick={() => setProductForm({ ...productForm, imageUploads: [] })}>
+                              Clear selected uploads
+                            </Button>
+                          )}
                         </div>
-                        <p className="text-xs text-muted-foreground font-body">Image media is linked to the product gallery.</p>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                          {productImagePreviews.map((src, index) => (
+                            <div key={`${src}-${index}`} className="aspect-[3/4] bg-secondary/30 rounded-sm overflow-hidden">
+                              <img src={src} alt={`${productForm.title || "Product"} preview ${index + 1}`} className="w-full h-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {(productForm.videoDataUrl || productForm.videoUrl) && (

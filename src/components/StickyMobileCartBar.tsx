@@ -46,6 +46,7 @@ export function StickyMobileCartBar({
           <p className="text-base font-price font-semibold leading-tight">
             {formatPrice(price.amount, price.currencyCode)}
           </p>
+          <p className="text-[10px] text-muted-foreground font-body leading-tight">Excl. GST</p>
           {!isAvailable && (
             <p className="text-xs text-destructive font-body">Out of Stock</p>
           )}

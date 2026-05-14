@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
 import { buildGa4CartPayload, trackGa4EcommerceEvent } from '@/lib/ga4Ecommerce';
+import { productMatchesCollectionQuery } from '@/lib/collectionProductFilters';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +54,8 @@ const collectionConfig: Record<string, { title: string; description: string; que
   'casual': { title: 'Casual Sarees', description: 'Bas Yun Hi - Everyday casual sarees', query: 'casual' },
   'office-wear': { title: 'Office Wear Sarees', description: 'Desk Se Dil Tak - Professional office wear sarees', query: 'office' },
   'party-wear': { title: 'Party Wear Sarees', description: 'Aj Main Upar - Glamorous party wear sarees', query: 'party' },
+  'blouse': { title: 'Blouses', description: 'Browse handcrafted blouses from Kora Sutra', query: 'blouse' },
+  'blouses': { title: 'Blouses', description: 'Browse handcrafted blouses from Kora Sutra', query: 'blouse' },
   'best-sellers': { title: 'Best Sellers', description: 'Our most loved sarees' },
   'new-arrivals': { title: 'New Arrivals', description: 'Fresh additions to our collection' },
   'all': { title: 'All Products', description: 'Browse our complete collection' },
@@ -270,11 +273,7 @@ export default function Collection() {
       // Filter products by title to ensure they actually contain the fabric/collection keyword
       let filteredData = data;
       if (config?.query && slug) {
-        const queryKeyword = config.query.toLowerCase();
-        filteredData = data.filter(product => {
-          const title = product.node.title.toLowerCase();
-          return title.includes(queryKeyword);
-        });
+        filteredData = data.filter(product => productMatchesCollectionQuery(product.node, config.query || ""));
       }
       
       // Track unavailable filters from URL params
@@ -293,10 +292,7 @@ export default function Collection() {
         // Check which fabrics have matching products
         const fabricsWithMatches: string[] = [];
         fabrics.forEach(fabric => {
-          const hasMatch = data.some(product => {
-            const regex = new RegExp(`\\b${fabric}\\b`, 'i');
-            return regex.test(product.node.title.toLowerCase());
-          });
+          const hasMatch = data.some(product => productMatchesCollectionQuery(product.node, fabric));
           if (hasMatch) {
             fabricsWithMatches.push(fabric);
           } else {
@@ -307,11 +303,7 @@ export default function Collection() {
         // Check which patterns have matching products
         const patternsWithMatches: string[] = [];
         patterns.forEach(pattern => {
-          const hasMatch = data.some(product => {
-            const combined = `${product.node.title} ${product.node.description || ''}`.toLowerCase();
-            const regex = new RegExp(`\\b${pattern.replace(' ', '\\s*')}\\b`, 'i');
-            return regex.test(combined);
-          });
+          const hasMatch = data.some(product => productMatchesCollectionQuery(product.node, pattern));
           if (hasMatch) {
             patternsWithMatches.push(pattern);
           } else {
@@ -324,10 +316,7 @@ export default function Collection() {
         occasions.forEach(occasion => {
           const occasionKeywords = occasion.match(/\(([^)]+)\)/);
           const keyword = occasionKeywords ? occasionKeywords[1].toLowerCase() : occasion;
-          const hasMatch = data.some(product => {
-            const combined = `${product.node.title} ${product.node.description || ''}`.toLowerCase();
-            return combined.includes(keyword);
-          });
+          const hasMatch = data.some(product => productMatchesCollectionQuery(product.node, keyword));
           if (hasMatch) {
             occasionsWithMatches.push(occasion);
           } else {
@@ -337,27 +326,17 @@ export default function Collection() {
         
         // Filter using only the filters that have matches
         filteredData = data.filter(product => {
-          const title = product.node.title.toLowerCase();
-          const description = (product.node.description || '').toLowerCase();
-          const combined = `${title} ${description}`;
-          
           // Check if product matches any available fabric (only if we have fabrics with matches)
-          const matchesFabric = fabricsWithMatches.length === 0 || fabricsWithMatches.some(fabric => {
-            const regex = new RegExp(`\\b${fabric}\\b`, 'i');
-            return regex.test(title);
-          });
+          const matchesFabric = fabricsWithMatches.length === 0 || fabricsWithMatches.some(fabric => productMatchesCollectionQuery(product.node, fabric));
           
           // Check if product matches any available pattern (only if we have patterns with matches)
-          const matchesPattern = patternsWithMatches.length === 0 || patternsWithMatches.some(pattern => {
-            const regex = new RegExp(`\\b${pattern.replace(' ', '\\s*')}\\b`, 'i');
-            return regex.test(combined);
-          });
+          const matchesPattern = patternsWithMatches.length === 0 || patternsWithMatches.some(pattern => productMatchesCollectionQuery(product.node, pattern));
           
           // Check if product matches any available occasion (only if we have occasions with matches)
           const matchesOccasion = occasionsWithMatches.length === 0 || occasionsWithMatches.some(occasion => {
             const occasionKeywords = occasion.match(/\(([^)]+)\)/);
             const keyword = occasionKeywords ? occasionKeywords[1].toLowerCase() : occasion;
-            return combined.includes(keyword);
+            return productMatchesCollectionQuery(product.node, keyword);
           });
           
           // Product must match at least one filter from each category that has available matches

@@ -137,7 +137,7 @@ async function saveProduct(supabase: any, product: any) {
     await supabase.from("product_images").delete().eq("product_id", saved.id);
     const images = product.images
       .filter((image: any) => image?.url)
-      .slice(0, 5)
+      .slice(0, 12)
       .map((image: any, index: number) => ({
         product_id: saved.id,
         url: image.url,

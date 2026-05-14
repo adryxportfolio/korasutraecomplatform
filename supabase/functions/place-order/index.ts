@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { couponRowToDomain, evaluateCoupon, normalizeCouponCode } from "../_shared/coupons.ts";
+import { calculateCheckoutTotals } from "../_shared/gst.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -185,6 +186,7 @@ async function sendOrderEmailsWithResults(order: any, orderItems: any[]) {
       <p><strong>Email:</strong> ${escapeHtml(order.contact_email || "-")}</p>
       <p><strong>Address:</strong> ${escapeHtml(order.ship_address_line1)}, ${escapeHtml(order.ship_address_line2 || "")} ${escapeHtml(order.ship_city)}, ${escapeHtml(order.ship_state)} ${escapeHtml(order.ship_postal_code)}</p>
       <p><strong>Payment:</strong> ${escapeHtml(order.payment_method)} / ${escapeHtml(order.payment_status)}</p>
+      <p><strong>GST (5%):</strong> INR ${Number(order.gst_amount || 0).toFixed(2)}</p>
       <p><strong>Total:</strong> INR ${Number(order.total || 0).toFixed(2)}</p>
       <hr/>
       <ul>${lineItems}</ul>
@@ -201,6 +203,7 @@ async function sendOrderEmailsWithResults(order: any, orderItems: any[]) {
       html: `
         <h2>Thank you for your order</h2>
         <p>Your Kora Sutra order <strong>${escapeHtml(order.order_number)}</strong> is confirmed.</p>
+        <p>GST (5%): <strong>INR ${Number(order.gst_amount || 0).toFixed(2)}</strong></p>
         <p>Total: <strong>INR ${Number(order.total || 0).toFixed(2)}</strong></p>
         <p>Track your order: <a href="https://korasutra.com/order-tracking/${encodeURIComponent(order.order_number)}">https://korasutra.com/order-tracking/${escapeHtml(order.order_number)}</a></p>
         <hr/>
@@ -348,7 +351,7 @@ serve(async (req: Request): Promise<Response> => {
       couponCode = couponRow.code;
     }
 
-    const total = Math.max(0, subtotal + codSurcharge - discountAmount);
+    const { gstAmount, total } = calculateCheckoutTotals({ subtotal, discountAmount, codSurcharge });
 
     if (paymentMethod === "razorpay" && !body.razorpayPaymentId) {
       return json({ error: "Razorpay payment details are required" }, 400);
@@ -473,6 +476,7 @@ serve(async (req: Request): Promise<Response> => {
         ship_postal_code: shipping.postalCode,
         payment_method: paymentMethod,
         payment_status: paymentMethod === "razorpay" ? "paid" : "pending",
+        gst_amount: gstAmount,
         total,
       },
     }, orderItems);

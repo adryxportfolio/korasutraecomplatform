@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { couponRowToDomain, evaluateCoupon, normalizeCouponCode } from "../_shared/coupons.ts";
+import { calculateCheckoutTotals } from "../_shared/gst.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,6 +88,9 @@ serve(async (req: Request): Promise<Response> => {
 
     if (!result.valid) return json({ error: result.reason || "Coupon is invalid" }, 400);
 
+    const discountAmount = result.discountAmount + result.shippingDiscountAmount;
+    const { gstAmount, total } = calculateCheckoutTotals({ subtotal, discountAmount });
+
     return json({
       success: true,
       coupon: {
@@ -96,8 +100,9 @@ serve(async (req: Request): Promise<Response> => {
         discountType: couponRow.discount_type,
       },
       subtotal,
-      discountAmount: result.discountAmount + result.shippingDiscountAmount,
-      total: Math.max(0, subtotal - result.discountAmount - result.shippingDiscountAmount),
+      discountAmount,
+      gstAmount,
+      total,
     });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Internal server error" }, 500);

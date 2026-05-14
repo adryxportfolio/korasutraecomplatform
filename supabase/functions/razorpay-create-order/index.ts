@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { couponRowToDomain, evaluateCoupon, normalizeCouponCode } from "../_shared/coupons.ts";
+import { calculateCheckoutTotals } from "../_shared/gst.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -127,7 +128,8 @@ serve(async (req: Request): Promise<Response> => {
         discountAmount = evaluation.discountAmount + evaluation.shippingDiscountAmount;
       }
 
-      payableAmount = Math.max(0, subtotal - discountAmount);
+      const totals = calculateCheckoutTotals({ subtotal, discountAmount });
+      payableAmount = totals.total;
     }
 
     const amountInPaise = Math.round(payableAmount * 100);
@@ -150,6 +152,7 @@ serve(async (req: Request): Promise<Response> => {
           source: "korasutra_checkout",
           subtotal: String(subtotal || payableAmount),
           discount_amount: String(discountAmount),
+          gst_amount: String(cartLines.length ? calculateCheckoutTotals({ subtotal, discountAmount }).gstAmount : 0),
           coupon_code: normalizeCouponCode(String(couponCode || "")) || undefined,
           ...(notes && typeof notes === "object" ? notes : {}),
         },
@@ -170,6 +173,7 @@ serve(async (req: Request): Promise<Response> => {
       receipt: data.receipt,
       subtotal,
       discountAmount,
+      gstAmount: cartLines.length ? calculateCheckoutTotals({ subtotal, discountAmount }).gstAmount : 0,
       total: payableAmount,
     });
   } catch (error) {

@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { subscribeToStorefrontRealtime } from "@/lib/realtimeTables";
 import { toast } from "sonner";
 import { buildGa4CartPayload, trackGa4EcommerceEvent } from "@/lib/ga4Ecommerce";
+import { calculateCheckoutTotals } from "@/lib/gst";
 
 declare global {
   interface Window {
@@ -111,7 +112,11 @@ export default function Checkout() {
   );
   const codSurcharge = paymentMethod === "cod" ? COD_SURCHARGE : 0;
   const discountAmount = Number(appliedCoupon?.discountAmount || 0);
-  const total = Math.max(0, subtotal + codSurcharge - discountAmount);
+  const { gstAmount, total } = useMemo(() => calculateCheckoutTotals({
+    subtotal,
+    discountAmount,
+    codSurcharge,
+  }), [subtotal, discountAmount, codSurcharge]);
   const contactPhone = normalizePhoneInput(contact.phone);
   const addressComplete = ADDRESS_REQUIRED_FIELDS.every(([field]) => String(shipping[field] || "").trim())
     && contactPhone.length >= 10;
@@ -278,7 +283,7 @@ export default function Checkout() {
       value: total,
       coupon: appliedCoupon?.coupon?.code || undefined,
       shipping: codSurcharge,
-      tax: 0,
+      tax: gstAmount,
     }));
     clearCart();
     toast.success(`Order ${data.order_number} placed`, {
@@ -688,10 +693,11 @@ export default function Checkout() {
                         </div>
                       )}
                     </div>
-                    <div className="flex justify-between"><span>Subtotal</span><span className="font-price">{formatPrice(String(subtotal), "INR")}</span></div>
+                    <div className="flex justify-between"><span>Subtotal (excl. GST)</span><span className="font-price">{formatPrice(String(subtotal), "INR")}</span></div>
                     <div className="flex justify-between"><span>Shipping</span><span>Free</span></div>
                     {codSurcharge > 0 && <div className="flex justify-between"><span>COD surcharge</span><span className="font-price">{formatPrice(String(codSurcharge), "INR")}</span></div>}
                     {discountAmount > 0 && <div className="flex justify-between text-green-700"><span>Coupon discount</span><span className="font-price">-{formatPrice(String(discountAmount), "INR")}</span></div>}
+                    <div className="flex justify-between"><span>GST (5%)</span><span className="font-price">{formatPrice(String(gstAmount), "INR")}</span></div>
                     <div className="flex justify-between text-lg font-heading pt-2"><span>Total</span><span className="font-price">{formatPrice(String(total), "INR")}</span></div>
                   </div>
                   <Button onClick={submitOrder} disabled={isPlacingOrder || items.length === 0} className="w-full h-14 text-base" size="lg">

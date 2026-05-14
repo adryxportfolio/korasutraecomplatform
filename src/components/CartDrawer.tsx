@@ -151,7 +151,7 @@ export const CartDrawer = () => {
               {/* Fixed checkout section */}
               <div className="flex-shrink-0 space-y-4 pt-4 border-t border-border bg-background">
                 <div className="flex justify-between items-center">
-                  <span className="text-lg font-heading">Subtotal</span>
+                  <span className="text-lg font-heading">Subtotal (excl. GST)</span>
                   <span className="text-xl font-bold font-price">
                     {formatPrice(subtotal.toString(), currencyCode)}
                   </span>
