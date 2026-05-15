@@ -61,6 +61,21 @@ async function notifyCommerceSync(payload: Record<string, unknown>) {
   }
 }
 
+function isShopifyCdnMediaUrl(url: string) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "cdn.shopify.com" || host.endsWith(".myshopify.com");
+  } catch {
+    return false;
+  }
+}
+
+function findShopifyCdnMediaUrls(product: any) {
+  return [...(product.images || []), ...(product.videos || [])]
+    .map((item: any) => String(item?.url || "").trim())
+    .filter((url) => url && isShopifyCdnMediaUrl(url));
+}
+
 async function sendOrderUpdateEmail(order: any) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("RESEND_FROM_EMAIL") || "Kora Sutra <orders@korasutra.com>";
@@ -106,6 +121,9 @@ async function sendOrderUpdateEmail(order: any) {
 }
 
 async function saveProduct(supabase: any, product: any) {
+  const shopifyMediaUrls = findShopifyCdnMediaUrls(product);
+  if (shopifyMediaUrls.length) throw new Error("Product media must be uploaded to Cloudinary instead of Shopify CDN");
+
   const { data: category } = await supabase.from("categories").select("id").eq("slug", product.categorySlug || "sarees").single();
   const payload = {
     handle: product.handle,
@@ -404,6 +422,14 @@ serve(async (req: Request): Promise<Response> => {
         const productId = await saveProduct(supabase, body.product || {});
         await notifyCommerceSync({ action: "product-updated", table: "products", productId });
         return json({ success: true, productId });
+      }
+
+      if (body.action === "delete-product") {
+        if (!body.productId) return json({ error: "Product is required" }, 400);
+        const { error } = await supabase.from("products").delete().eq("id", body.productId);
+        if (error) return json({ error: "Unable to delete product" }, 500);
+        await notifyCommerceSync({ action: "product-deleted", tables: ["products", "product_images", "product_videos", "product_variants"], productId: body.productId });
+        return json({ success: true });
       }
 
       if (body.action === "bulk-import-products") {

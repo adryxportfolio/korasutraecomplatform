@@ -8,6 +8,7 @@ import { SecureCheckoutBadges } from "@/components/SecureCheckoutBadges";
 import { Button } from "@/components/ui/button";
 import { useCartStore, type CartItem } from "@/stores/cartStore";
 import { formatPrice } from "@/lib/shopify";
+import { CHECKOUT_COST_DISCLOSURE } from "@/lib/checkoutMessaging";
 import {
   buildGa4CartPayload,
   trackGa4EcommerceEvent,
@@ -179,6 +180,7 @@ export default function Cart() {
                 <div className="space-y-3 font-body text-sm border-b border-border pb-4">
                   <div className="flex justify-between"><span>Subtotal (excl. GST)</span><span className="font-price">{formatPrice(String(subtotal), currencyCode)}</span></div>
                   <div className="flex justify-between"><span>Shipping</span><span>Free</span></div>
+                  <p className="text-xs text-muted-foreground">{CHECKOUT_COST_DISCLOSURE}</p>
                   <div className="flex justify-between text-lg font-heading pt-2"><span>Total before GST</span><span className="font-price">{formatPrice(String(subtotal), currencyCode)}</span></div>
                 </div>
                 <div className="space-y-4 pt-4">

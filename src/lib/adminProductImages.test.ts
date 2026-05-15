@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildAdminProductImages } from "./adminProductImages";
+import { buildAdminProductImages, findShopifyCdnMediaUrls } from "./adminProductImages";
 
 describe("admin product images", () => {
   test("builds an ordered multi-image gallery from stored URLs and uploaded files", () => {
@@ -23,6 +23,22 @@ describe("admin product images", () => {
       uploadedImages: [{ url: "" }, { url: "https://cdn.example.com/front.jpg" }],
     })).toEqual([
       { url: "https://cdn.example.com/front.jpg", altText: "Kantha Saree" },
+    ]);
+  });
+
+  test("identifies Shopify CDN images and videos before product media is saved", () => {
+    expect(findShopifyCdnMediaUrls({
+      images: [
+        { url: "https://res.cloudinary.com/kora/image/upload/front.jpg" },
+        { url: "https://cdn.shopify.com/s/files/1/0800/5258/4666/files/front.jpg" },
+      ],
+      videos: [
+        { url: "https://cdn.shopify.com/videos/c/o/v/video.mp4" },
+        { url: "https://res.cloudinary.com/kora/video/upload/drape.mp4" },
+      ],
+    })).toEqual([
+      "https://cdn.shopify.com/s/files/1/0800/5258/4666/files/front.jpg",
+      "https://cdn.shopify.com/videos/c/o/v/video.mp4",
     ]);
   });
 });

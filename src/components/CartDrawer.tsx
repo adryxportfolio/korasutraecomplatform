@@ -13,6 +13,7 @@ import {
 import { ShoppingBag, Minus, Plus, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
 import { formatPrice } from "@/lib/shopify";
+import { CHECKOUT_COST_DISCLOSURE } from "@/lib/checkoutMessaging";
 import { toast } from "sonner";
 
 export const CartDrawer = () => {
@@ -156,6 +157,10 @@ export const CartDrawer = () => {
                     {formatPrice(subtotal.toString(), currencyCode)}
                   </span>
                 </div>
+
+                <p className="text-xs text-muted-foreground font-body">
+                  {CHECKOUT_COST_DISCLOSURE}
+                </p>
 
                 <p className="text-xs text-muted-foreground font-body text-center">
                   Login &amp; payment options (incl. Cash on Delivery) available at secure checkout.

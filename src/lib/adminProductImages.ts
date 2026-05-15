@@ -11,6 +11,26 @@ export type BuildAdminProductImagesInput = {
   maxImages?: number;
 };
 
+export type ProductMediaUrlInput = {
+  images?: Array<{ url?: string | null }>;
+  videos?: Array<{ url?: string | null }>;
+};
+
+export function isShopifyCdnMediaUrl(url: string) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "cdn.shopify.com" || host.endsWith(".myshopify.com");
+  } catch {
+    return false;
+  }
+}
+
+export function findShopifyCdnMediaUrls({ images = [], videos = [] }: ProductMediaUrlInput) {
+  return [...images, ...videos]
+    .map((item) => String(item.url || "").trim())
+    .filter((url) => url && isShopifyCdnMediaUrl(url));
+}
+
 export function buildAdminProductImages({
   title,
   imageUrls = "",

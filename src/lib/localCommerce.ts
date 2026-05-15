@@ -293,6 +293,17 @@ export async function saveLocalProduct(product: any) {
   return row.id;
 }
 
+export function removeLocalProductRows(products: any[], productId: string) {
+  return products.filter((product) => product.id !== productId);
+}
+
+export async function deleteLocalProduct(productId: string) {
+  if (!productId) throw new Error("Product is required");
+  const products = await loadLocalAdminProducts();
+  writeStoredProducts(removeLocalProductRows(products, productId));
+  return { success: true };
+}
+
 export async function changeLocalAdminPassword(currentPassword: string, newPassword: string) {
   if (!await canUseLocalAdmin(LOCAL_ADMIN_USERNAME, currentPassword)) {
     throw new Error("Current password is incorrect");

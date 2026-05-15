@@ -44,6 +44,7 @@ import {
   adjustLocalInventory,
   canUseLocalAdmin,
   changeLocalAdminPassword,
+  deleteLocalProduct,
   importLocalProducts,
   loadLocalAdminData,
   deleteLocalCoupon,
@@ -72,7 +73,7 @@ import {
 } from "@/lib/siteSettings";
 import { buildEditableJournalRows } from "@/lib/journalAdminRows";
 import { buildAddToCartUrl } from "@/lib/addToCartUrl";
-import { buildAdminProductImages, type AdminProductImageInput } from "@/lib/adminProductImages";
+import { buildAdminProductImages, findShopifyCdnMediaUrls, type AdminProductImageInput } from "@/lib/adminProductImages";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
@@ -251,6 +252,7 @@ export default function Admin() {
       if (action === "bulk-import-products") {
         return importLocalProducts((options.body?.products || []) as AdminImportProduct[]);
       }
+      if (action === "delete-product") return deleteLocalProduct(String(options.body?.productId || ""));
       if (action === "change-password") {
         return changeLocalAdminPassword(String(options.body?.currentPassword || ""), String(options.body?.newPassword || ""));
       }
@@ -547,7 +549,11 @@ export default function Admin() {
         imageUrls: productForm.imageUrl,
         uploadedImages,
       });
-      if (productImages.some((image) => image.url.includes("shopify.com")) || uploadedVideo.url.includes("shopify.com")) throw new Error("Please upload product media to Kora Sutra storage instead of Shopify CDN");
+      const shopifyMediaUrls = findShopifyCdnMediaUrls({
+        images: productImages,
+        videos: uploadedVideo.url ? [uploadedVideo] : [],
+      });
+      if (shopifyMediaUrls.length) throw new Error("Please upload product media to Cloudinary instead of Shopify CDN");
       const catalogTags = tagsForCatalogSelection(productForm.catalogSelection);
       const result = await api({
         method: "POST",
@@ -615,6 +621,18 @@ export default function Admin() {
       catalogSelection: selectionFromTags(product.tags || []),
     });
     setProductTab("add");
+  };
+
+  const deleteProduct = async (product: any) => {
+    if (!window.confirm(`Delete ${product.title}? This cannot be undone.`)) return;
+    try {
+      await api({ method: "POST", body: { action: "delete-product", productId: product.id } });
+      await broadcastCommerceChange(supabase, { action: "product-deleted", tables: ["products", "product_images", "product_videos", "product_variants"], productId: product.id });
+      toast.success("Product deleted");
+      fetchAdminData();
+    } catch (error) {
+      toast.error("Unable to delete product", { description: error instanceof Error ? error.message : undefined });
+    }
   };
 
   const selectMediaFile = (file: File | null, media: "image" | "video") => {
@@ -774,6 +792,8 @@ export default function Admin() {
       const text = await file.text();
       const products: AdminImportProduct[] = parseShopifyProductsCsv(text);
       if (!products.length) throw new Error("No importable products found in CSV");
+      const shopifyMediaUrls = products.flatMap((product) => findShopifyCdnMediaUrls({ images: product.images }));
+      if (shopifyMediaUrls.length) throw new Error("CSV product images must be migrated to Cloudinary before import");
 
       const result = await api({
         method: "POST",
@@ -1242,6 +1262,9 @@ export default function Admin() {
                               <Button size="sm" variant="outline" onClick={() => editProduct(product)}>Edit</Button>
                               <Button size="sm" variant="outline" onClick={() => copyAddToCartUrl(product)} aria-label={`Copy add-to-cart URL for ${product.title}`}>
                                 <Link2 className="w-4 h-4" />
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => deleteProduct(product)} aria-label={`Delete ${product.title}`}>
+                                <Trash2 className="w-4 h-4" />
                               </Button>
                             </td>
                           </tr>
