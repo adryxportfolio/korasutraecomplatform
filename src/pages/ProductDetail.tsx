@@ -4,7 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { ShoppingBag, Loader2, Clock, Heart, Share2, Plus, Bell } from 'lucide-react';
 import { StockStatus } from '@/components/StockStatus';
-import { fetchProductByHandle, fetchProducts, ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { fetchProductByHandle, fetchProducts, ShopifyProduct } from '@/lib/shopify';
 import { toTitleCase } from '@/lib/titleCase';
 import { useCartStore } from '@/stores/cartStore';
 import { useWishlistStore } from '@/stores/wishlistStore';
@@ -16,6 +16,7 @@ import { Footer } from '@/components/Footer';
 import { SwipeableImageGallery } from '@/components/SwipeableImageGallery';
 import { StickyMobileCartBar } from '@/components/StickyMobileCartBar';
 import { RecentlyViewed } from '@/components/RecentlyViewed';
+import { ProductPrice } from '@/components/ProductPrice';
 
 import {
   Accordion,
@@ -396,9 +397,13 @@ function RelatedProducts({ currentHandle, currentProductType, currentFabric, pro
             <h3 className="font-heading text-sm md:text-base text-foreground group-hover:text-accent transition-colors truncate">
               {toTitleCase(node.title)}
             </h3>
-            <p className="text-sm text-muted-foreground" style={{ fontFamily: 'var(--font-price)' }}>
-              {formatPrice(node.priceRange.minVariantPrice.amount, node.priceRange.minVariantPrice.currencyCode)}
-            </p>
+            <ProductPrice
+              price={node.priceRange.minVariantPrice}
+              compareAtPrice={node.priceRange.minVariantCompareAtPrice}
+              priceClassName="text-sm"
+              compareAtClassName="text-xs"
+              discountClassName="text-[11px]"
+            />
           </Link>
         ))}
       </div>
@@ -774,9 +779,15 @@ export default function ProductDetail() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-xl md:text-2xl font-heading" style={{ fontFamily: 'var(--font-price)' }}>
-                      {currentVariant && formatPrice(currentVariant.price.amount, currentVariant.price.currencyCode)}
-                    </p>
+                    {currentVariant && (
+                      <ProductPrice
+                        price={currentVariant.price}
+                        compareAtPrice={currentVariant.compareAtPrice}
+                        priceClassName="text-xl md:text-2xl font-heading"
+                        compareAtClassName="text-sm md:text-base"
+                        discountClassName="text-xs md:text-sm"
+                      />
+                    )}
                     <p className="text-xs text-muted-foreground">Excluding GST</p>
                   </div>
                   <span className="px-3 py-1 bg-foreground text-background text-xs font-body uppercase tracking-wide">
@@ -1063,6 +1074,7 @@ export default function ProductDetail() {
         {currentVariant && (
           <StickyMobileCartBar
             price={currentVariant.price}
+            compareAtPrice={currentVariant.compareAtPrice}
             isAvailable={currentVariant.availableForSale}
             onBuyNow={handleBuyNow}
             onAddToCart={handleAddToCart}

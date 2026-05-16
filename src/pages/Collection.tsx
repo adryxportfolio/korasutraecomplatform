@@ -3,9 +3,10 @@ import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, SlidersHorizontal, ChevronDown, ChevronRight, Heart, X, Check } from 'lucide-react';
-import { fetchProducts, ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { fetchProducts, ShopifyProduct } from '@/lib/shopify';
 import { toTitleCase } from '@/lib/titleCase';
 import { StockIndicator } from '@/components/StockStatus';
+import { ProductPrice } from '@/components/ProductPrice';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { useCartStore } from '@/stores/cartStore';
@@ -1285,10 +1286,14 @@ export default function Collection() {
                         </span>
                       )}
                       
-                      <div className="flex items-center justify-between gap-2 mt-1">
-                        <p className="text-sm md:text-base font-price">
-                          {formatPrice(node.priceRange.minVariantPrice.amount, node.priceRange.minVariantPrice.currencyCode)}
-                        </p>
+                      <div className="flex items-start justify-between gap-2 mt-1">
+                        <ProductPrice
+                          price={node.priceRange.minVariantPrice}
+                          compareAtPrice={node.priceRange.minVariantCompareAtPrice}
+                          priceClassName="text-sm md:text-base"
+                          compareAtClassName="text-xs md:text-sm"
+                          discountClassName="text-[10px] md:text-xs"
+                        />
                         {node.variants.edges[0]?.node && (
                           <StockIndicator
                             availableForSale={node.variants.edges[0].node.availableForSale}

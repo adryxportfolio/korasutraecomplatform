@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ShoppingBag, Loader2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { fetchProducts, ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { fetchProducts, ShopifyProduct } from '@/lib/shopify';
 import { toTitleCase } from '@/lib/titleCase';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 import { StockIndicator } from '@/components/StockStatus';
+import { ProductPrice } from '@/components/ProductPrice';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
@@ -169,12 +170,13 @@ export function ShopifyProducts() {
                     {toTitleCase(product.node.title)}
                   </h3>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm text-muted-foreground" style={{ fontFamily: 'var(--font-price)' }}>
-                      {formatPrice(
-                        product.node.priceRange.minVariantPrice.amount,
-                        product.node.priceRange.minVariantPrice.currencyCode
-                      )}
-                    </p>
+                    <ProductPrice
+                      price={product.node.priceRange.minVariantPrice}
+                      compareAtPrice={product.node.priceRange.minVariantCompareAtPrice}
+                      priceClassName="text-sm"
+                      compareAtClassName="text-xs"
+                      discountClassName="text-[11px]"
+                    />
                     {product.node.variants.edges[0]?.node && (
                       <StockIndicator
                         availableForSale={product.node.variants.edges[0].node.availableForSale}

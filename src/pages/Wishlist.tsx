@@ -6,8 +6,8 @@ import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { useWishlistStore } from '@/stores/wishlistStore';
 import { useCartStore } from '@/stores/cartStore';
-import { formatPrice } from '@/lib/shopify';
 import { toTitleCase } from '@/lib/titleCase';
+import { ProductPrice } from '@/components/ProductPrice';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { buildGa4CartPayload, trackGa4EcommerceEvent } from '@/lib/ga4Ecommerce';
@@ -119,9 +119,14 @@ export default function Wishlist() {
                     <h3 className="font-heading text-sm md:text-base text-foreground group-hover:text-accent transition-colors line-clamp-2">
                       {toTitleCase(node.title)}
                     </h3>
-                    <p className="text-sm text-muted-foreground mt-1 font-price">
-                      {formatPrice(node.priceRange.minVariantPrice.amount, node.priceRange.minVariantPrice.currencyCode)}
-                    </p>
+                    <ProductPrice
+                      price={node.priceRange.minVariantPrice}
+                      compareAtPrice={node.priceRange.minVariantCompareAtPrice}
+                      className="mt-1"
+                      priceClassName="text-sm"
+                      compareAtClassName="text-xs"
+                      discountClassName="text-[11px]"
+                    />
                   </Link>
 
                   {/* Action Buttons */}

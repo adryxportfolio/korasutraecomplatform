@@ -74,6 +74,7 @@ import {
 import { buildEditableJournalRows } from "@/lib/journalAdminRows";
 import { buildAddToCartUrl } from "@/lib/addToCartUrl";
 import { buildAdminProductImages, findNonCloudinaryMediaUrls, findShopifyCdnMediaUrls, type AdminProductImageInput } from "@/lib/adminProductImages";
+import { validateCompareAtPrice } from "@/lib/productPricing";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
@@ -542,6 +543,9 @@ export default function Admin() {
   const saveProduct = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
+      const compareAtError = validateCompareAtPrice(productForm.price, productForm.compareAtPrice);
+      if (compareAtError) throw new Error(compareAtError);
+
       const uploadedImages = await uploadProductImages();
       const uploadedVideo = await uploadProductMedia("video");
       const productImages = buildAdminProductImages({
@@ -1289,8 +1293,8 @@ export default function Admin() {
                     <Field label="Handle"><Input value={productForm.handle} onChange={(e) => setProductForm({ ...productForm, handle: slugify(e.target.value) })} required /></Field>
                     <Field label="Category"><Select value={productForm.categorySlug} onValueChange={(value) => setProductForm({ ...productForm, categorySlug: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{categoryOptions.map((category: any) => <SelectItem key={category.slug} value={category.slug}>{category.name}</SelectItem>)}</SelectContent></Select></Field>
                     <Field label="Status"><Select value={productForm.status} onValueChange={(value) => setProductForm({ ...productForm, status: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="draft">Draft</SelectItem><SelectItem value="archived">Archived</SelectItem></SelectContent></Select></Field>
-                    <Field label="Price (excluding GST)"><Input value={productForm.price} onChange={(e) => setProductForm({ ...productForm, price: e.target.value })} required type="number" /></Field>
-                    <Field label="Compare-at Price (excluding GST)"><Input value={productForm.compareAtPrice} onChange={(e) => setProductForm({ ...productForm, compareAtPrice: e.target.value })} type="number" /></Field>
+                    <Field label="Price (excluding GST)"><Input value={productForm.price} onChange={(e) => setProductForm({ ...productForm, price: e.target.value })} required type="number" min="0" step="0.01" /></Field>
+                    <Field label="Compare-at Price (excluding GST)"><Input value={productForm.compareAtPrice} onChange={(e) => setProductForm({ ...productForm, compareAtPrice: e.target.value })} type="number" min="0" step="0.01" /></Field>
                     <Field label="Fabric"><Input value={productForm.fabric} onChange={(e) => setProductForm({ ...productForm, fabric: e.target.value })} /></Field>
                     <Field label="Technique"><Input value={productForm.technique} onChange={(e) => setProductForm({ ...productForm, technique: e.target.value })} /></Field>
                     <Field label="Color"><Input value={productForm.color} onChange={(e) => setProductForm({ ...productForm, color: e.target.value })} /></Field>

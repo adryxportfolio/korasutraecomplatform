@@ -3,6 +3,7 @@ import { AdminImportProduct, parseShopifyProductsCsv } from "@/lib/shopifyCsv";
 import type { ShopifyProduct } from "@/lib/shopify";
 import { textMatchesCatalogQuery } from "@/lib/catalogTaxonomy";
 import { cacheSiteSettings, defaultSiteSettings, readCachedSiteSettings, type SiteSettings } from "@/lib/siteSettings";
+import { validateCompareAtPrice } from "@/lib/productPricing";
 
 const LOCAL_PRODUCTS_KEY = "ks_local_products";
 const LOCAL_COUPONS_KEY = "ks_local_coupons";
@@ -32,6 +33,24 @@ function categoryFor(slug: string) {
   return slug === "blouses"
     ? { id: "local-category-blouses", slug: "blouses", name: "Blouses", sort_order: 2 }
     : { id: "local-category-sarees", slug: "sarees", name: "Sarees", sort_order: 1 };
+}
+
+function normalizeAmount(value: number | string | null | undefined) {
+  return Number(value || 0).toFixed(2);
+}
+
+function moneyOrNull(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function compareAtMoney(price: number | string | null | undefined, compareAtPrice: number | string | null | undefined) {
+  const priceAmount = moneyOrNull(price) ?? 0;
+  const compareAtAmount = moneyOrNull(compareAtPrice);
+  return compareAtAmount !== null && compareAtAmount > priceAmount
+    ? { amount: normalizeAmount(compareAtAmount), currencyCode: "INR" }
+    : null;
 }
 
 function productToAdminRow(product: AdminImportProduct & { videos?: any[] }, index: number) {
@@ -98,7 +117,16 @@ export function adminRowToShopifyProduct(row: any): ShopifyProduct {
   const images = [...(row.product_images || [])].sort((a, b) => a.position - b.position);
   const variants = [...(row.product_variants || [])].sort((a, b) => a.position - b.position);
   const firstVariant = variants[0];
+  const minPriceVariant = variants.length ? variants.reduce((lowest, variant) => {
+    const variantPrice = Number(variant.price ?? row.price);
+    const lowestPrice = Number(lowest.price ?? row.price);
+    return variantPrice < lowestPrice ? variant : lowest;
+  }, variants[0]) : undefined;
   const minPrice = variants.reduce((min, variant) => Math.min(min, Number(variant.price ?? row.price)), Number(firstVariant?.price ?? row.price));
+  const minVariantCompareAtPrice = compareAtMoney(
+    minPrice,
+    minPriceVariant?.compare_at_price ?? row.compare_at_price,
+  );
 
   return {
     node: {
@@ -114,9 +142,10 @@ export function adminRowToShopifyProduct(row: any): ShopifyProduct {
       tags: [row.fabric, row.technique, row.color, row.category?.slug, row.category?.name, ...(row.tags || []), row.has_blouse_piece ? "with blouse" : null].filter(Boolean),
       priceRange: {
         minVariantPrice: {
-          amount: Number(minPrice || row.price || 0).toFixed(2),
+          amount: normalizeAmount(minPrice || row.price || 0),
           currencyCode: "INR",
         },
+        minVariantCompareAtPrice,
       },
       images: {
         edges: images.map((image) => ({
@@ -135,9 +164,13 @@ export function adminRowToShopifyProduct(row: any): ShopifyProduct {
             title: variant.title || "Default",
             sku: variant.sku,
             price: {
-              amount: Number(variant.price ?? row.price ?? 0).toFixed(2),
+              amount: normalizeAmount(variant.price ?? row.price ?? 0),
               currencyCode: "INR",
             },
+            compareAtPrice: compareAtMoney(
+              variant.price ?? row.price,
+              variant.compare_at_price ?? row.compare_at_price,
+            ),
             availableForSale: !variant.track_inventory || Number(variant.inventory_qty || 0) > 0,
             quantityAvailable: variant.track_inventory ? Number(variant.inventory_qty || 0) : null,
             selectedOptions: [
@@ -265,14 +298,27 @@ export async function loadLocalAdminData(): Promise<LocalAdminData> {
 
 export async function saveLocalProduct(product: any) {
   const products = await loadLocalAdminProducts();
+  const productPrice = Number(product.price || 0);
+  const productCompareAtPrice = product.compareAtPrice ? Number(product.compareAtPrice) : null;
+  const productCompareAtError = validateCompareAtPrice(productPrice, productCompareAtPrice);
+  if (productCompareAtError) throw new Error(productCompareAtError);
+
+  const variants = product.variant ? [product.variant] : product.variants || [];
+  variants.forEach((variant: any) => {
+    const variantPrice = variant.price ? Number(variant.price) : productPrice;
+    const variantCompareAtPrice = variant.compareAtPrice ? Number(variant.compareAtPrice) : null;
+    const variantCompareAtError = validateCompareAtPrice(variantPrice, variantCompareAtPrice);
+    if (variantCompareAtError) throw new Error(variantCompareAtError);
+  });
+
   const importProduct: AdminImportProduct & { videos?: any[] } = {
     handle: product.handle,
     title: product.title,
     description: product.description || "",
     shortDescription: product.shortDescription || "",
     categorySlug: product.categorySlug || "sarees",
-    price: Number(product.price || 0),
-    compareAtPrice: product.compareAtPrice ? Number(product.compareAtPrice) : null,
+    price: productPrice,
+    compareAtPrice: productCompareAtPrice,
     fabric: product.fabric || "",
     technique: product.technique || "",
     color: product.color || "",
@@ -283,7 +329,7 @@ export async function saveLocalProduct(product: any) {
     tags: product.tags || [],
     images: product.images || [],
     videos: product.videos || [],
-    variants: product.variant ? [product.variant] : product.variants || [],
+    variants,
   };
   const row = productToAdminRow(importProduct, products.length);
   const existingIndex = products.findIndex((item) => item.handle === row.handle);
@@ -331,6 +377,16 @@ export async function adjustLocalInventory(variantId: string, delta: number) {
 }
 
 export async function importLocalProducts(products: AdminImportProduct[]) {
+  products.forEach((product) => {
+    const compareAtError = validateCompareAtPrice(product.price, product.compareAtPrice);
+    if (compareAtError) throw new Error(`${product.handle || product.title}: ${compareAtError}`);
+
+    product.variants.forEach((variant) => {
+      const variantCompareAtError = validateCompareAtPrice(variant.price || product.price, variant.compareAtPrice);
+      if (variantCompareAtError) throw new Error(`${variant.sku || product.handle || product.title}: ${variantCompareAtError}`);
+    });
+  });
+
   const rows = products.map(productToAdminRow);
   const existing = await loadLocalAdminProducts();
   const merged = [...existing];

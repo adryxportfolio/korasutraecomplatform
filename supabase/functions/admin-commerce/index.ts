@@ -91,6 +91,18 @@ function findNonCloudinaryMediaUrls(product: any) {
     .filter((url) => url && !isCloudinaryMediaUrl(url));
 }
 
+function optionalMoney(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function validateCompareAtPrice(price: number, compareAtPrice: number | null) {
+  if (compareAtPrice !== null && compareAtPrice <= price) {
+    throw new Error("Compare-at Price must be higher than Price");
+  }
+}
+
 async function sendOrderUpdateEmail(order: any) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("RESEND_FROM_EMAIL") || "Kora Sutra <orders@korasutra.com>";
@@ -144,6 +156,10 @@ async function saveProduct(supabase: any, product: any) {
   const videoInputs = Array.isArray(product.videos) ? product.videos.filter((video: any) => video?.url).slice(0, 4) : [];
 
   const { data: category } = await supabase.from("categories").select("id").eq("slug", product.categorySlug || "sarees").single();
+  const productPrice = Number(product.price || 0);
+  const productCompareAtPrice = optionalMoney(product.compareAtPrice);
+  validateCompareAtPrice(productPrice, productCompareAtPrice);
+
   const payload = {
     handle: product.handle,
     title: product.title,
@@ -154,8 +170,8 @@ async function saveProduct(supabase: any, product: any) {
     technique: product.technique || null,
     color: product.color || null,
     has_blouse_piece: Boolean(product.hasBlousePiece),
-    price: Number(product.price || 0),
-    compare_at_price: product.compareAtPrice ? Number(product.compareAtPrice) : null,
+    price: productPrice,
+    compare_at_price: productCompareAtPrice,
     status: product.status || "draft",
     seo_title: product.seoTitle || null,
     seo_description: product.seoDescription || null,
@@ -209,6 +225,10 @@ async function saveProduct(supabase: any, product: any) {
 
   for (const variant of variants) {
     const sku = variant.sku || `${product.handle}-${variant.title || "default"}`.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const variantPrice = optionalMoney(variant.price);
+    const variantCompareAtPrice = optionalMoney(variant.compareAtPrice);
+    validateCompareAtPrice(variantPrice ?? productPrice, variantCompareAtPrice);
+
     await supabase.from("product_variants").upsert({
       product_id: saved.id,
       sku,
@@ -217,8 +237,8 @@ async function saveProduct(supabase: any, product: any) {
       option1_value: variant.option1Value || null,
       option2_name: variant.option2Name || null,
       option2_value: variant.option2Value || null,
-      price: variant.price ? Number(variant.price) : null,
-      compare_at_price: variant.compareAtPrice ? Number(variant.compareAtPrice) : null,
+      price: variantPrice,
+      compare_at_price: variantCompareAtPrice,
       inventory_qty: Number(variant.inventoryQty || 0),
       track_inventory: variant.trackInventory !== false,
       position: Number(variant.position || 0),

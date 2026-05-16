@@ -6,6 +6,7 @@ import brownTussarImg from '@/assets/brown-tussar-baluchari.png';
 import pinkTissueImg from '@/assets/pink-tissue-muslin-sequins.png';
 import saree3 from '@/assets/saree-3.jpg';
 import saree4 from '@/assets/saree-4.jpg';
+import { getPriceDisplay } from '@/lib/productPricing';
 const DUKAAN_STORE = 'https://shop.korasutra.com';
 const products = [{
   id: 1,
@@ -43,6 +44,43 @@ const products = [{
   fabric: 'Tissue',
   productUrl: DUKAAN_STORE
 }];
+
+function formatStaticPrice(price: number) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(price);
+}
+
+function StaticProductPrice({
+  price,
+  originalPrice,
+  priceClassName = 'font-medium',
+}: {
+  price: number;
+  originalPrice?: number;
+  priceClassName?: string;
+}) {
+  const display = getPriceDisplay(price, originalPrice ?? null);
+
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+      {display.isDiscounted && display.compareAtAmount !== null && (
+        <span className="text-sm text-muted-foreground line-through font-price">
+          {formatStaticPrice(display.compareAtAmount)}
+        </span>
+      )}
+      <span className={`font-price ${priceClassName}`}>{formatStaticPrice(display.priceAmount)}</span>
+      {display.discountPercentage !== null && (
+        <span className="text-xs font-body font-medium text-green-700">
+          ({display.discountPercentage}% off)
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ProductCard({
   product,
   index,
@@ -57,13 +95,6 @@ function ProductCard({
     once: true,
     margin: '-50px'
   });
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(price);
-  };
   return <motion.div ref={ref} initial={{
     opacity: 0,
     y: 40
@@ -114,12 +145,7 @@ function ProductCard({
         <h3 className="font-heading text-lg group-hover:text-accent transition-colors">
           {product.name}
         </h3>
-        <div className="flex items-center gap-2">
-          <span className="font-price font-medium">{formatPrice(product.price)}</span>
-          {product.originalPrice && <span className="text-sm text-muted-foreground line-through font-price">
-              {formatPrice(product.originalPrice)}
-            </span>}
-        </div>
+        <StaticProductPrice price={product.price} originalPrice={product.originalPrice} />
       </div>
     </motion.div>;
 }
@@ -196,22 +222,7 @@ export function FeaturedProducts() {
                       {product.name}
                     </h3>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="font-price font-medium text-lg">
-                          {new Intl.NumberFormat('en-IN', {
-                        style: 'currency',
-                        currency: 'INR',
-                        maximumFractionDigits: 0
-                      }).format(product.price)}
-                        </span>
-                        {product.originalPrice && <span className="text-sm text-muted-foreground line-through font-price">
-                            {new Intl.NumberFormat('en-IN', {
-                        style: 'currency',
-                        currency: 'INR',
-                        maximumFractionDigits: 0
-                      }).format(product.originalPrice)}
-                          </span>}
-                      </div>
+                      <StaticProductPrice price={product.price} originalPrice={product.originalPrice} priceClassName="font-medium text-lg" />
                       <span className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-body rounded-sm opacity-0 group-hover:opacity-100 transition-opacity">
                         Buy Now
                         <ChevronRight className="w-4 h-4" />

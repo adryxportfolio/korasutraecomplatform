@@ -1,12 +1,16 @@
 import { ShoppingBag, MessageCircle, Loader2, Plus, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { formatPrice } from '@/lib/shopify';
+import { ProductPrice } from '@/components/ProductPrice';
 
 export interface StickyMobileCartBarProps {
   price: {
     amount: string;
     currencyCode: string;
   };
+  compareAtPrice?: {
+    amount: string;
+    currencyCode: string;
+  } | null;
   isAvailable: boolean;
   onBuyNow: () => void;
   onAddToCart: () => void;
@@ -19,6 +23,7 @@ const WHATSAPP_NUMBER = '917995862266';
 
 export function StickyMobileCartBar({ 
   price, 
+  compareAtPrice,
   isAvailable,
   onBuyNow,
   onAddToCart,
@@ -43,9 +48,13 @@ export function StickyMobileCartBar({
       <div className="flex items-center gap-2 px-3 py-2">
         {/* Price */}
         <div className="flex-shrink-0 min-w-0">
-          <p className="text-base font-price font-semibold leading-tight">
-            {formatPrice(price.amount, price.currencyCode)}
-          </p>
+          <ProductPrice
+            price={price}
+            compareAtPrice={compareAtPrice}
+            priceClassName="text-base font-semibold leading-tight"
+            compareAtClassName="text-[11px]"
+            discountClassName="hidden"
+          />
           <p className="text-[10px] text-muted-foreground font-body leading-tight">Excl. GST</p>
           {!isAvailable && (
             <p className="text-xs text-destructive font-body">Out of Stock</p>

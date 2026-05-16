@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useRecentlyViewedStore } from '@/stores/recentlyViewedStore';
-import { formatPrice } from '@/lib/shopify';
+import { ProductPrice } from '@/components/ProductPrice';
 
 interface RecentlyViewedProps {
   currentHandle?: string;
@@ -44,9 +44,14 @@ export function RecentlyViewed({ currentHandle }: RecentlyViewedProps) {
               <h3 className="font-heading text-xs text-foreground group-hover:text-accent transition-colors line-clamp-2 leading-tight">
                 {node.title}
               </h3>
-              <p className="text-xs text-muted-foreground mt-0.5 font-price">
-                {formatPrice(node.priceRange.minVariantPrice.amount, node.priceRange.minVariantPrice.currencyCode)}
-              </p>
+              <ProductPrice
+                price={node.priceRange.minVariantPrice}
+                compareAtPrice={node.priceRange.minVariantCompareAtPrice}
+                className="mt-0.5"
+                priceClassName="text-xs"
+                compareAtClassName="text-[11px]"
+                discountClassName="text-[10px]"
+              />
             </Link>
           ))}
         </div>
@@ -73,9 +78,13 @@ export function RecentlyViewed({ currentHandle }: RecentlyViewedProps) {
             <h3 className="font-heading text-sm md:text-base text-foreground group-hover:text-accent transition-colors truncate">
               {node.title}
             </h3>
-            <p className="text-sm text-muted-foreground font-price">
-              {formatPrice(node.priceRange.minVariantPrice.amount, node.priceRange.minVariantPrice.currencyCode)}
-            </p>
+            <ProductPrice
+              price={node.priceRange.minVariantPrice}
+              compareAtPrice={node.priceRange.minVariantCompareAtPrice}
+              priceClassName="text-sm"
+              compareAtClassName="text-xs"
+              discountClassName="text-[11px]"
+            />
           </Link>
         ))}
       </div>

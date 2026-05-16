@@ -10,7 +10,7 @@ globalThis.localStorage = {
   length: 0,
 } as Storage;
 
-const { filterProductsWithImages } = await import("./shopify");
+const { filterProductsWithImages, mapCatalogProduct } = await import("./shopify");
 
 function product(handle: string, imageUrl?: string): ShopifyProduct {
   return {
@@ -50,5 +50,47 @@ describe("shopify product image guards", () => {
       product("blank", " "),
       product("cloudinary", "https://res.cloudinary.com/demo/image/upload/front.jpg"),
     ]).map((item) => item.node.handle)).toEqual(["cloudinary"]);
+  });
+});
+
+describe("shopify catalog pricing", () => {
+  test("maps compare-at prices onto storefront variants and product price ranges", () => {
+    const item = mapCatalogProduct({
+      id: "product-a",
+      title: "Discounted Saree",
+      description: "",
+      handle: "discounted-saree",
+      tags: [],
+      price: 1999,
+      compare_at_price: 2999,
+      fabric: null,
+      technique: null,
+      color: null,
+      has_blouse_piece: false,
+      product_images: [{ url: "https://res.cloudinary.com/demo/image/upload/saree.jpg", alt_text: null, position: 0 }],
+      product_variants: [{
+        id: "variant-a",
+        sku: "KS-A",
+        title: "Default",
+        option1_name: null,
+        option1_value: null,
+        option2_name: null,
+        option2_value: null,
+        price: 1999,
+        compare_at_price: 2999,
+        inventory_qty: 1,
+        track_inventory: true,
+        position: 0,
+      }],
+    });
+
+    expect(item.node.priceRange.minVariantCompareAtPrice).toEqual({
+      amount: "2999.00",
+      currencyCode: "INR",
+    });
+    expect(item.node.variants.edges[0].node.compareAtPrice).toEqual({
+      amount: "2999.00",
+      currencyCode: "INR",
+    });
   });
 });

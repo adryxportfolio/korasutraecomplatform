@@ -23,6 +23,10 @@ export interface ShopifyProduct {
         amount: string;
         currencyCode: string;
       };
+      minVariantCompareAtPrice?: {
+        amount: string;
+        currencyCode: string;
+      } | null;
     };
     images: {
       edges: Array<{
@@ -51,6 +55,10 @@ export interface ShopifyProduct {
             amount: string;
             currencyCode: string;
           };
+          compareAtPrice?: {
+            amount: string;
+            currencyCode: string;
+          } | null;
           availableForSale: boolean;
           quantityAvailable: number | null;
           selectedOptions: Array<{
@@ -74,6 +82,7 @@ type CatalogProductRow = {
   handle: string;
   tags: string[] | null;
   price: number | string;
+  compare_at_price: number | string | null;
   fabric: string | null;
   technique: string | null;
   color: string | null;
@@ -90,6 +99,7 @@ type CatalogProductRow = {
     option2_name: string | null;
     option2_value: string | null;
     price: number | string | null;
+    compare_at_price: number | string | null;
     inventory_qty: number;
     track_inventory: boolean;
     position: number;
@@ -98,6 +108,20 @@ type CatalogProductRow = {
 
 function normalizeAmount(value: number | string | null | undefined) {
   return Number(value || 0).toFixed(2);
+}
+
+function moneyOrNull(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function compareAtMoney(price: number | string | null | undefined, compareAtPrice: number | string | null | undefined) {
+  const priceAmount = moneyOrNull(price) ?? 0;
+  const compareAtAmount = moneyOrNull(compareAtPrice);
+  return compareAtAmount !== null && compareAtAmount > priceAmount
+    ? { amount: normalizeAmount(compareAtAmount), currencyCode: "INR" }
+    : null;
 }
 
 function selectedOptionsForVariant(variant: CatalogProductRow["product_variants"][number]) {
@@ -123,14 +147,23 @@ function buildOptions(variants: CatalogProductRow["product_variants"] = []) {
   }));
 }
 
-function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
+export function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
   const images = [...(row.product_images || [])].sort((a, b) => a.position - b.position);
   const variants = [...(row.product_variants || [])].sort((a, b) => a.position - b.position);
   const firstVariant = variants[0];
+  const minPriceVariant = variants.length ? variants.reduce((lowest, variant) => {
+    const variantPrice = Number(variant.price ?? row.price);
+    const lowestPrice = Number(lowest.price ?? row.price);
+    return variantPrice < lowestPrice ? variant : lowest;
+  }, variants[0]) : undefined;
   const minPrice = variants.reduce((min, variant) => {
     const price = Number(variant.price ?? row.price);
     return Math.min(min, price);
   }, Number(firstVariant?.price ?? row.price));
+  const minVariantCompareAtPrice = compareAtMoney(
+    minPrice,
+    minPriceVariant?.compare_at_price ?? row.compare_at_price,
+  );
 
   return {
     node: {
@@ -157,6 +190,7 @@ function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
           amount: normalizeAmount(minPrice),
           currencyCode: "INR",
         },
+        minVariantCompareAtPrice,
       },
       images: {
         edges: images.map((image) => ({
@@ -185,6 +219,10 @@ function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
               amount: normalizeAmount(variant.price ?? row.price),
               currencyCode: "INR",
             },
+            compareAtPrice: compareAtMoney(
+              variant.price ?? row.price,
+              variant.compare_at_price ?? row.compare_at_price,
+            ),
             availableForSale: !variant.track_inventory || variant.inventory_qty > 0,
             quantityAvailable: variant.track_inventory ? Number(variant.inventory_qty || 0) : null,
             selectedOptions: selectedOptionsForVariant(variant),
@@ -205,7 +243,7 @@ export function filterProductsWithImages(products: ShopifyProduct[]) {
 }
 
 function baseProductSelect() {
-  return "id, title, description, handle, tags, price, fabric, technique, color, has_blouse_piece, category:categories(slug, name), product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value, price, inventory_qty, track_inventory, position)";
+  return "id, title, description, handle, tags, price, compare_at_price, fabric, technique, color, has_blouse_piece, category:categories(slug, name), product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value, price, compare_at_price, inventory_qty, track_inventory, position)";
 }
 
 export async function fetchProducts(first: number = 20, query?: string): Promise<ShopifyProduct[]> {
