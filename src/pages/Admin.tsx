@@ -73,7 +73,7 @@ import {
 } from "@/lib/siteSettings";
 import { buildEditableJournalRows } from "@/lib/journalAdminRows";
 import { buildAddToCartUrl } from "@/lib/addToCartUrl";
-import { buildAdminProductImages, findShopifyCdnMediaUrls, type AdminProductImageInput } from "@/lib/adminProductImages";
+import { buildAdminProductImages, findNonCloudinaryMediaUrls, findShopifyCdnMediaUrls, type AdminProductImageInput } from "@/lib/adminProductImages";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
@@ -554,6 +554,12 @@ export default function Admin() {
         videos: uploadedVideo.url ? [uploadedVideo] : [],
       });
       if (shopifyMediaUrls.length) throw new Error("Please upload product media to Cloudinary instead of Shopify CDN");
+      const nonCloudinaryMediaUrls = isLocalAdmin ? [] : findNonCloudinaryMediaUrls({
+        images: productImages,
+        videos: uploadedVideo.url ? [uploadedVideo] : [],
+      });
+      if (nonCloudinaryMediaUrls.length) throw new Error("Please upload product media to Cloudinary before publishing");
+      if (productForm.status === "active" && productImages.length === 0) throw new Error("Add at least one Cloudinary product photo before publishing");
       const catalogTags = tagsForCatalogSelection(productForm.catalogSelection);
       const result = await api({
         method: "POST",
@@ -794,6 +800,8 @@ export default function Admin() {
       if (!products.length) throw new Error("No importable products found in CSV");
       const shopifyMediaUrls = products.flatMap((product) => findShopifyCdnMediaUrls({ images: product.images }));
       if (shopifyMediaUrls.length) throw new Error("CSV product images must be migrated to Cloudinary before import");
+      const nonCloudinaryMediaUrls = isLocalAdmin ? [] : products.flatMap((product) => findNonCloudinaryMediaUrls({ images: product.images }));
+      if (nonCloudinaryMediaUrls.length) throw new Error("CSV product images must use Cloudinary URLs before import");
 
       const result = await api({
         method: "POST",

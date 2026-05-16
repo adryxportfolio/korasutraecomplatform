@@ -25,10 +25,25 @@ export function isShopifyCdnMediaUrl(url: string) {
   }
 }
 
+export function isCloudinaryMediaUrl(url: string) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "res.cloudinary.com" || host.endsWith(".cloudinary.com");
+  } catch {
+    return false;
+  }
+}
+
 export function findShopifyCdnMediaUrls({ images = [], videos = [] }: ProductMediaUrlInput) {
   return [...images, ...videos]
     .map((item) => String(item.url || "").trim())
     .filter((url) => url && isShopifyCdnMediaUrl(url));
+}
+
+export function findNonCloudinaryMediaUrls({ images = [], videos = [] }: ProductMediaUrlInput) {
+  return [...images, ...videos]
+    .map((item) => String(item.url || "").trim())
+    .filter((url) => url && !isCloudinaryMediaUrl(url));
 }
 
 export function buildAdminProductImages({

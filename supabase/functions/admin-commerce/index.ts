@@ -76,6 +76,21 @@ function findShopifyCdnMediaUrls(product: any) {
     .filter((url) => url && isShopifyCdnMediaUrl(url));
 }
 
+function isCloudinaryMediaUrl(url: string) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "res.cloudinary.com" || host.endsWith(".cloudinary.com");
+  } catch {
+    return false;
+  }
+}
+
+function findNonCloudinaryMediaUrls(product: any) {
+  return [...(product.images || []), ...(product.videos || [])]
+    .map((item: any) => String(item?.url || "").trim())
+    .filter((url) => url && !isCloudinaryMediaUrl(url));
+}
+
 async function sendOrderUpdateEmail(order: any) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("RESEND_FROM_EMAIL") || "Kora Sutra <orders@korasutra.com>";
@@ -123,6 +138,10 @@ async function sendOrderUpdateEmail(order: any) {
 async function saveProduct(supabase: any, product: any) {
   const shopifyMediaUrls = findShopifyCdnMediaUrls(product);
   if (shopifyMediaUrls.length) throw new Error("Product media must be uploaded to Cloudinary instead of Shopify CDN");
+  const nonCloudinaryMediaUrls = findNonCloudinaryMediaUrls(product);
+  if (nonCloudinaryMediaUrls.length) throw new Error("Product media must be uploaded to Cloudinary before publishing");
+  const imageInputs = Array.isArray(product.images) ? product.images.filter((image: any) => image?.url).slice(0, 12) : [];
+  const videoInputs = Array.isArray(product.videos) ? product.videos.filter((video: any) => video?.url).slice(0, 4) : [];
 
   const { data: category } = await supabase.from("categories").select("id").eq("slug", product.categorySlug || "sarees").single();
   const payload = {
@@ -143,6 +162,7 @@ async function saveProduct(supabase: any, product: any) {
     tags: product.tags || [],
   };
   if (!payload.handle || !payload.title || !payload.price) throw new Error("Title, handle, and price are required");
+  if (payload.status === "active" && imageInputs.length === 0) throw new Error("Active products need at least one Cloudinary product photo");
 
   const { data: saved, error } = await supabase
     .from("products")
@@ -153,9 +173,7 @@ async function saveProduct(supabase: any, product: any) {
 
   if (Array.isArray(product.images)) {
     await supabase.from("product_images").delete().eq("product_id", saved.id);
-    const images = product.images
-      .filter((image: any) => image?.url)
-      .slice(0, 12)
+    const images = imageInputs
       .map((image: any, index: number) => ({
         product_id: saved.id,
         url: image.url,
@@ -167,9 +185,7 @@ async function saveProduct(supabase: any, product: any) {
 
   if (Array.isArray(product.videos)) {
     await supabase.from("product_videos").delete().eq("product_id", saved.id);
-    const videos = product.videos
-      .filter((video: any) => video?.url)
-      .slice(0, 4)
+    const videos = videoInputs
       .map((video: any, index: number) => ({
         product_id: saved.id,
         url: video.url,

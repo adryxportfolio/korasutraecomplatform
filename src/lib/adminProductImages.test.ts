@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildAdminProductImages, findShopifyCdnMediaUrls } from "./adminProductImages";
+import { buildAdminProductImages, findNonCloudinaryMediaUrls, findShopifyCdnMediaUrls } from "./adminProductImages";
 
 describe("admin product images", () => {
   test("builds an ordered multi-image gallery from stored URLs and uploaded files", () => {
@@ -38,6 +38,22 @@ describe("admin product images", () => {
       ],
     })).toEqual([
       "https://cdn.shopify.com/s/files/1/0800/5258/4666/files/front.jpg",
+      "https://cdn.shopify.com/videos/c/o/v/video.mp4",
+    ]);
+  });
+
+  test("identifies media that is not synced to Cloudinary", () => {
+    expect(findNonCloudinaryMediaUrls({
+      images: [
+        { url: "https://res.cloudinary.com/kora/image/upload/front.jpg" },
+        { url: "https://cdn.example.com/front.jpg" },
+      ],
+      videos: [
+        { url: "https://res.cloudinary.com/kora/video/upload/drape.mp4" },
+        { url: "https://cdn.shopify.com/videos/c/o/v/video.mp4" },
+      ],
+    })).toEqual([
+      "https://cdn.example.com/front.jpg",
       "https://cdn.shopify.com/videos/c/o/v/video.mp4",
     ]);
   });

@@ -196,30 +196,39 @@ function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
   };
 }
 
+export function productHasRenderableImage(product: ShopifyProduct) {
+  return product.node.images.edges.some((edge) => Boolean(edge.node.url?.trim()));
+}
+
+export function filterProductsWithImages(products: ShopifyProduct[]) {
+  return products.filter(productHasRenderableImage);
+}
+
 function baseProductSelect() {
   return "id, title, description, handle, tags, price, fabric, technique, color, has_blouse_piece, category:categories(slug, name), product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value, price, inventory_qty, track_inventory, position)";
 }
 
 export async function fetchProducts(first: number = 20, query?: string): Promise<ShopifyProduct[]> {
   try {
+    const requestLimit = query?.trim() ? Math.max(first, 500) : Math.max(first, 100);
     const request = (supabase as any)
       .from("products")
       .select(baseProductSelect())
       .eq("status", "active")
       .order("position", { ascending: true })
       .order("created_at", { ascending: false })
-      .limit(query?.trim() ? Math.max(first, 500) : first);
+      .limit(requestLimit);
 
     const { data, error } = await request;
     if (error) throw error;
-    if (!data?.length) return loadLocalShopifyProducts(first, query);
+    if (!data?.length) return filterProductsWithImages(await loadLocalShopifyProducts(first, query));
     const rows = query?.trim()
       ? data.filter((row: CatalogProductRow) => textMatchesCatalogQuery(`${row.title} ${row.description || ""} ${row.fabric || ""} ${row.technique || ""} ${row.color || ""} ${row.category?.slug || ""} ${row.category?.name || ""}`, row.tags || [], query))
       : data;
-    return rows.slice(0, first).map(mapCatalogProduct);
+    return filterProductsWithImages(rows.map(mapCatalogProduct)).slice(0, first);
   } catch (error) {
     console.error("Error fetching catalog products:", error);
-    return loadLocalShopifyProducts(first, query);
+    return filterProductsWithImages(await loadLocalShopifyProducts(first, query));
   }
 }
 
@@ -233,7 +242,8 @@ export async function fetchProductByHandle(handle: string): Promise<ShopifyProdu
       .single();
 
     if (error || !data) return loadLocalProductByHandle(handle);
-    return mapCatalogProduct(data).node;
+    const product = mapCatalogProduct(data);
+    return productHasRenderableImage(product) ? product.node : null;
   } catch (error) {
     console.error("Error fetching catalog product:", error);
     return loadLocalProductByHandle(handle);
