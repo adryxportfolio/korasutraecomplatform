@@ -34,6 +34,10 @@ import {
   buildGa4ItemFromVariant,
   trackGa4EcommerceEvent,
 } from '@/lib/ga4Ecommerce';
+import {
+  BLOUSE_STYLING_DISCLAIMER,
+  blousePieceDisplayText,
+} from '@/lib/productPresentation';
 
 // Extract fabric type from product title
 function extractFabricFromTitle(title: string): string {
@@ -218,7 +222,7 @@ function ProductDetailsTable({
             ? 'bg-green-100 text-green-700 border border-green-200' 
             : 'bg-red-100 text-red-700 border border-red-200'
         }`}>
-          {value === true ? 'Yes' : 'No'}
+          {blousePieceDisplayText(value === true)}
         </span>
       );
     }
@@ -944,7 +948,7 @@ export default function ProductDetail() {
                       </p>
                     )}
                     <p className="font-body text-foreground/80 leading-relaxed text-xs mt-3 italic">
-                      <strong>Note:</strong> The blouse showcased in the images is from our in-house wardrobe and has been used only for styling.
+                      <strong>Note:</strong> {BLOUSE_STYLING_DISCLAIMER}
                     </p>
                   </AccordionContent>
                 </AccordionItem>
@@ -970,7 +974,7 @@ export default function ProductDetail() {
                       {STANDARD_PRODUCT_DESCRIPTION}
                     </p>
                     <p className="font-body text-foreground/80 leading-relaxed text-sm mt-3 italic">
-                      <strong>Blouse:</strong> The blouse showcased in the images is from our in-house wardrobe and has been used only for styling.
+                      <strong>Blouse:</strong> {BLOUSE_STYLING_DISCLAIMER}
                     </p>
                   </AccordionContent>
                 </AccordionItem>
@@ -1039,7 +1043,7 @@ export default function ProductDetail() {
                         Some images on this page use AI-generated models to showcase styling and drape.
                       </p>
                       <p>
-                        <strong>Blouse:</strong> The blouse showcased in the images is from our in-house wardrobe and has been used only for styling.
+                        <strong>Blouse:</strong> {BLOUSE_STYLING_DISCLAIMER}
                       </p>
                       <p>
                         While we strive for accuracy, the actual saree may differ slightly in color tone, weave, border detailing, or finish due to fabric nature, lighting, and digital rendering.

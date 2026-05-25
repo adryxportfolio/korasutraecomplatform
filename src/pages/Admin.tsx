@@ -75,6 +75,8 @@ import { buildEditableJournalRows } from "@/lib/journalAdminRows";
 import { buildAddToCartUrl } from "@/lib/addToCartUrl";
 import { buildAdminProductImages, findNonCloudinaryMediaUrls, findShopifyCdnMediaUrls, type AdminProductImageInput } from "@/lib/adminProductImages";
 import { validateCompareAtPrice } from "@/lib/productPricing";
+import { buildProductExportCsv, buildProductFeedXml } from "@/lib/productFeeds";
+import { blousePieceDisplayText } from "@/lib/productPresentation";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
@@ -98,6 +100,7 @@ const navItems: Array<{ id: AdminSection; label: string; icon: typeof LayoutDash
 const orderStatuses = ["pending_payment", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded"];
 const paymentStatuses = ["pending", "paid", "failed", "refunded"];
 const LOCAL_ADMIN_TOKEN_PREFIX = "local-admin-";
+const PRODUCT_FEED_SITE_URL = "https://korasutra.com";
 
 function statusBadge(status: string) {
   if (["paid", "confirmed", "delivered"].includes(status)) return "bg-green-100 text-green-800 border-green-200";
@@ -152,6 +155,7 @@ export default function Admin() {
   const [journalTab, setJournalTab] = useState("list");
   const [reviewReplies, setReviewReplies] = useState<Record<string, string>>({});
   const [isImporting, setIsImporting] = useState(false);
+  const [productXmlFeedUrl, setProductXmlFeedUrl] = useState("");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [salesRange, setSalesRange] = useState({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
@@ -390,6 +394,18 @@ export default function Admin() {
       unsubscribe();
     };
   }, [adminToken, fetchAdminData, isLocalAdmin]);
+
+  useEffect(() => {
+    if (!adminToken || !data.products.length) {
+      setProductXmlFeedUrl("");
+      return;
+    }
+
+    const xml = buildProductFeedXml(data.products, { siteUrl: PRODUCT_FEED_SITE_URL });
+    const url = URL.createObjectURL(new Blob([xml], { type: "application/xml;charset=utf-8" }));
+    setProductXmlFeedUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [adminToken, data.products]);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -1117,6 +1133,17 @@ export default function Admin() {
     URL.revokeObjectURL(url);
   };
 
+  const exportProducts = () => {
+    const csv = buildProductExportCsv(data.products, { siteUrl: PRODUCT_FEED_SITE_URL });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `korasutra-products-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!adminToken) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -1252,9 +1279,25 @@ export default function Admin() {
               </TabsList>
               <TabsContent value="list">
                 <Panel title={`Products (${filteredProducts.length})`}>
+                  <div className="flex flex-wrap justify-end gap-2 mb-3">
+                    <Button type="button" variant="outline" size="sm" onClick={exportProducts} disabled={!data.products.length}>
+                      <Download className="w-4 h-4 mr-2" />Download CSV
+                    </Button>
+                    {productXmlFeedUrl ? (
+                      <Button asChild type="button" variant="outline" size="sm">
+                        <a href={productXmlFeedUrl} target="_blank" rel="noreferrer" download="korasutra-product-feed.xml">
+                          <FileText className="w-4 h-4 mr-2" />XML Feed Link
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="outline" size="sm" disabled>
+                        <FileText className="w-4 h-4 mr-2" />XML Feed Link
+                      </Button>
+                    )}
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead><tr className="text-left border-b border-border"><th className="py-2">Product</th><th>Category</th><th>Price (excl. GST)</th><th>Stock</th><th>Status</th><th></th></tr></thead>
+                      <thead><tr className="text-left border-b border-border"><th className="py-2">Product</th><th>Category</th><th>Price (excl. GST)</th><th>Stock</th><th>Blouse Piece</th><th>Status</th><th></th></tr></thead>
                       <tbody>
                         {filteredProducts.map((product: any) => (
                           <tr key={product.id} className="border-b border-border last:border-0">
@@ -1269,6 +1312,7 @@ export default function Admin() {
                             <td>{product.category?.name || "Sarees"}</td>
                             <td className="font-price">{formatPrice(String(product.price), "INR")}</td>
                             <td>{(product.product_variants || []).reduce((sum: number, variant: any) => sum + Number(variant.inventory_qty || 0), 0)}</td>
+                            <td>{blousePieceDisplayText(Boolean(product.has_blouse_piece))}</td>
                             <td><Badge className={statusBadge(product.status)}>{product.status}</Badge></td>
                             <td className="flex gap-2 justify-end py-2">
                               <Button size="sm" variant="outline" onClick={() => editProduct(product)}>Edit</Button>
@@ -1331,7 +1375,7 @@ export default function Admin() {
                         <p className="text-xs text-muted-foreground font-body">Video media is uploaded to Cloudinary and shown in the product gallery.</p>
                       </div>
                     )}
-                    <label className="flex items-center gap-3 md:col-span-2"><Switch checked={productForm.hasBlousePiece} onCheckedChange={(checked) => setProductForm({ ...productForm, hasBlousePiece: checked })} /> Has blouse piece</label>
+                    <label className="flex items-center gap-3 md:col-span-2"><Switch checked={productForm.hasBlousePiece} onCheckedChange={(checked) => setProductForm({ ...productForm, hasBlousePiece: checked })} /> Blouse shown in picture included</label>
                     <div className="md:col-span-2 grid lg:grid-cols-3 gap-4">
                       {(Object.keys(catalogTaxonomy) as CatalogTaxonomyGroup[]).map((group) => (
                         <div key={group} className="border border-border rounded-sm p-3">

@@ -1,3 +1,5 @@
+import { BLOUSE_STYLING_DISCLAIMER } from "@/lib/productPresentation";
+
 export type FAQItem = {
   question: string;
   answer: string;
@@ -55,7 +57,7 @@ export function buildProductFAQs(productTitle: string, fabric: string, productTy
     },
     {
       question: "Is the blouse included?",
-      answer: "Blouse inclusion depends on the product details shown above. Styling blouses in images may be from our in-house wardrobe unless the product details say otherwise.",
+      answer: `Blouse inclusion depends on the product details shown above. ${BLOUSE_STYLING_DISCLAIMER}`,
     },
     {
       question: "How should I care for this saree?",
