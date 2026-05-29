@@ -134,6 +134,8 @@ export function adminRowToShopifyProduct(row: any): ShopifyProduct {
       title: row.title,
       description: row.description || "",
       handle: row.handle,
+      seoTitle: row.seo_title || null,
+      seoDescription: row.seo_description || null,
       fabric: row.fabric,
       technique: row.technique,
       color: row.color,

@@ -10,6 +10,8 @@ export interface ShopifyProduct {
     description: string;
     handle: string;
     tags?: string[];
+    seoTitle?: string | null;
+    seoDescription?: string | null;
     fabric?: string | null;
     technique?: string | null;
     color?: string | null;
@@ -81,6 +83,8 @@ type CatalogProductRow = {
   description: string | null;
   handle: string;
   tags: string[] | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
   price: number | string;
   compare_at_price: number | string | null;
   fabric: string | null;
@@ -185,6 +189,8 @@ export function mapCatalogProduct(row: CatalogProductRow): ShopifyProduct {
         row.category?.name,
         row.has_blouse_piece ? "with blouse" : null,
       ].filter(Boolean) as string[],
+      seoTitle: row.seo_title,
+      seoDescription: row.seo_description,
       priceRange: {
         minVariantPrice: {
           amount: normalizeAmount(minPrice),
@@ -243,7 +249,7 @@ export function filterProductsWithImages(products: ShopifyProduct[]) {
 }
 
 function baseProductSelect() {
-  return "id, title, description, handle, tags, price, compare_at_price, fabric, technique, color, has_blouse_piece, category:categories(slug, name), product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value, price, compare_at_price, inventory_qty, track_inventory, position)";
+  return "id, title, description, handle, tags, seo_title, seo_description, price, compare_at_price, fabric, technique, color, has_blouse_piece, category:categories(slug, name), product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value, price, compare_at_price, inventory_qty, track_inventory, position)";
 }
 
 export async function fetchProducts(first: number = 20, query?: string): Promise<ShopifyProduct[]> {

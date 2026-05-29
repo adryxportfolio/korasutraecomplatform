@@ -1,13 +1,22 @@
-# Kora Sutra - Handcrafted Sarees
-# https://korasutra.com
+# Korasutra robots policy
+# Customize the sitemap host if NEXT_PUBLIC_SITE_URL changes.
 
-User-agent: Googlebot
+User-agent: *
 Allow: /
-Crawl-delay: 1
 
-User-agent: Bingbot
-Allow: /
-Crawl-delay: 1
+# Private, transactional, and internal routes should not be crawled.
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /account
+Disallow: /checkout
+Disallow: /cart
+Disallow: /cart/add
+Disallow: /thank-you
+Disallow: /order-tracking
+Disallow: /api/
+Disallow: /functions/
+Disallow: /_next/
+Disallow: /static/
 
 User-agent: Twitterbot
 Allow: /
@@ -15,14 +24,4 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
-User-agent: *
-Allow: /
-Crawl-delay: 2
-
-# Sitemap location
 Sitemap: https://korasutra.com/sitemap.xml
-
-# Block unnecessary paths
-Disallow: /api/
-Disallow: /_next/
-Disallow: /static/

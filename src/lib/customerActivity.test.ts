@@ -28,6 +28,7 @@ describe("customer activity payloads", () => {
                   sku: "KS-BLUE",
                   price: { amount: "1200", currencyCode: "INR" },
                   availableForSale: true,
+                  quantityAvailable: 3,
                   selectedOptions: [],
                 },
               }],

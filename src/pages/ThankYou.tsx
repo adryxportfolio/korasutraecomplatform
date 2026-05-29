@@ -36,7 +36,7 @@ export default function ThankYou() {
   return (
     <>
       <Helmet>
-        <title>Thank You - Kora Sutra</title>
+        <title>Thank You - Korasutra</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
       <Navbar />

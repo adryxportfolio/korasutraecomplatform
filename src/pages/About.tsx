@@ -16,7 +16,7 @@ export default function About() {
   return (
     <>
       <Helmet>
-        <title>About Kora Sutra | Our Story & Heritage - Handcrafted Sarees from Bengal</title>
+        <title>About Korasutra | Our Story & Heritage - Handcrafted Sarees from Bengal</title>
         <meta 
           name="description" 
           content="Discover the story behind Kora Sutra. We celebrate Bengal's rich textile heritage through handcrafted sarees - where artisans, weaves, and stories meet with honesty." 
@@ -24,7 +24,7 @@ export default function About() {
         <meta name="keywords" content="Kora Sutra story, about Kora Sutra, Bengal textile heritage, handcrafted sarees story, artisan sarees, Indian textile tradition" />
         <link rel="canonical" href="https://korasutra.com/about" />
         
-        <meta property="og:title" content="About Kora Sutra | Our Story & Heritage" />
+        <meta property="og:title" content="About Korasutra | Our Story & Heritage" />
         <meta property="og:description" content="Discover the story behind Kora Sutra - celebrating Bengal's rich textile heritage through handcrafted sarees." />
         <meta property="og:url" content="https://korasutra.com/about" />
         <meta property="og:type" content="website" />

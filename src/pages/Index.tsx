@@ -18,8 +18,8 @@ const organizationSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
   "@id": "https://korasutra.com/#organization",
-  name: "Kora Sutra",
-  alternateName: ["KoraSutra", "Kora Sutra Sarees"],
+  name: "Korasutra",
+  alternateName: ["Kora Sutra", "KoraSutra", "Kora Sutra Sarees"],
   url: "https://korasutra.com",
   logo: {
     "@type": "ImageObject",
@@ -30,7 +30,7 @@ const organizationSchema = {
   image: "https://korasutra.com/og-image.png",
   description: "Premium handcrafted sarees celebrating Bengal's rich textile heritage. Shop Tussar silk, Muslin, Linen, Jamdani, Kantha stitch & Block print sarees.",
   foundingDate: "2024",
-  founders: [{ "@type": "Person", name: "Kora Sutra Team" }],
+  founders: [{ "@type": "Person", name: "Korasutra Team" }],
   address: {
     "@type": "PostalAddress",
     addressLocality: "Hyderabad",
@@ -58,7 +58,7 @@ const websiteSchema = {
   "@type": "WebSite",
   "@id": "https://korasutra.com/#website",
   url: "https://korasutra.com",
-  name: "Kora Sutra",
+  name: "Korasutra",
   description: "Shop handcrafted sarees online - Tussar, Muslin, Silk, Linen & more",
   publisher: { "@id": "https://korasutra.com/#organization" },
   potentialAction: {
@@ -75,7 +75,7 @@ const localBusinessSchema = {
   "@context": "https://schema.org",
   "@type": "ClothingStore",
   "@id": "https://korasutra.com/#localbusiness",
-  name: "Kora Sutra",
+  name: "Korasutra",
   image: "https://korasutra.com/og-image.png",
   url: "https://korasutra.com",
   telephone: "+91-79958-62266",
@@ -124,28 +124,28 @@ const Index = () => {
   return (
     <>
       <Helmet>
-        <title>Kora Sutra | Handcrafted Tussar, Muslin & Silk Sarees</title>
+        <title>Korasutra | Handcrafted Tussar, Muslin & Silk Sarees</title>
         <meta
           name="description"
           content="Shop authentic handcrafted sarees at Kora Sutra. Discover premium Tussar silk, Muslin, Linen, Jamdani, Kantha stitch & Block print sarees. Free shipping across India. Celebrating Bengal's rich textile heritage."
         />
         <meta
           name="keywords"
-          content="Kora Sutra, KoraSutra, kora sutra sarees, kora sutra official, korasutra.com, buy sarees online, handcrafted sarees, tussar silk sarees, muslin sarees, linen sarees, jamdani sarees, kantha stitch sarees, block print sarees, batik sarees, Bengal sarees, Indian sarees, handloom sarees, luxury sarees, designer sarees, silk sarees online, buy sarees online India, traditional sarees, wedding sarees, party wear sarees, office wear sarees, casual sarees, festive sarees, Durga Puja sarees, Diwali sarees, bridal sarees, pure silk saree, handwoven sarees, artisan sarees, sustainable fashion India, eco-friendly sarees, organic sarees, saree shop online India, best saree brand India, premium sarees India, saree for women, saree collection online, Bengal handloom, Baluchari sarees, Bishnupur silk, Bhagalpur silk, Shantipur saree, cotton sarees, matka silk, katan silk, tissue tussar, tissue muslin, zari saree, zari border saree, hand painted saree, Paithani saree, saree with blouse, running blouse saree, free shipping sarees India, COD sarees, cash on delivery sarees, saree gift, saree for mother, saree for wedding guest, lightweight saree, summer saree, winter saree, monsoon saree, silk saree care, how to drape saree, saree styling, handloom vs powerloom, authentic handloom India, handloom mark, GI tagged sarees, geographical indication sarees, Hyderabad saree shop, saree store Telangana, Indian ethnic wear, traditional Indian clothing, six yards of elegance, handloom revival, support artisans India, weaver community, Bengal weaving, Birbhum handloom, Nadia handloom, bird motif saree, floral motif saree, leaf motif saree, geometric pattern saree, paisley saree, lotus motif saree"
+          content="Korasutra, Kora Sutra, KoraSutra, kora sutra sarees, kora sutra official, korasutra.com, buy sarees online, handcrafted sarees, tussar silk sarees, muslin sarees, linen sarees, jamdani sarees, kantha stitch sarees, block print sarees, batik sarees, Bengal sarees, Indian sarees, handloom sarees, luxury sarees, designer sarees, silk sarees online, buy sarees online India"
         />
         <link rel="canonical" href="https://korasutra.com/" />
         
         {/* Open Graph */}
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://korasutra.com" />
-        <meta property="og:title" content="Kora Sutra | Handcrafted Sarees - Premium Tussar, Muslin & Silk Sarees" />
+        <meta property="og:title" content="Korasutra | Handcrafted Sarees - Premium Tussar, Muslin & Silk Sarees" />
         <meta property="og:description" content="Shop authentic handcrafted sarees at Kora Sutra. Discover premium Tussar silk, Muslin, Linen, Jamdani & Kantha stitch sarees." />
         <meta property="og:image" content="https://korasutra.com/og-image.png" />
-        <meta property="og:site_name" content="Kora Sutra" />
+        <meta property="og:site_name" content="Korasutra" />
         
         {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Kora Sutra | Handcrafted Sarees" />
+        <meta name="twitter:title" content="Korasutra | Handcrafted Sarees" />
         <meta name="twitter:description" content="Shop authentic handcrafted sarees - Tussar, Muslin, Silk & more" />
         <meta name="twitter:image" content="https://korasutra.com/og-image.png" />
         

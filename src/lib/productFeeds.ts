@@ -11,10 +11,17 @@ type ProductFeedVariant = {
   position?: number | null;
 };
 
+type ProductFeedVideo = {
+  url?: string | null;
+  position?: number | null;
+};
+
 export type ProductFeedRow = {
   id?: string | null;
   handle?: string | null;
   title?: string | null;
+  description?: string | null;
+  short_description?: string | null;
   category?: { name?: string | null; slug?: string | null } | null;
   status?: string | null;
   price?: number | string | null;
@@ -23,7 +30,9 @@ export type ProductFeedRow = {
   technique?: string | null;
   color?: string | null;
   has_blouse_piece?: boolean | null;
+  tags?: string[] | null;
   product_images?: ProductFeedImage[] | null;
+  product_videos?: ProductFeedVideo[] | null;
   product_variants?: ProductFeedVariant[] | null;
 };
 
@@ -31,23 +40,44 @@ type ProductFeedOptions = {
   siteUrl?: string;
 };
 
-const PRODUCT_EXPORT_HEADERS = [
-  "ID",
-  "Handle",
-  "Title",
-  "Category",
-  "Status",
-  "Price",
-  "Compare-at Price",
-  "Stock",
-  "Fabric",
-  "Technique",
-  "Color",
-  "Blouse Piece",
-  "Product URL",
-  "Image URLs",
-  "SKUs",
+const META_CATALOG_HEADERS = [
+  "id",
+  "title",
+  "description",
+  "availability",
+  "condition",
+  "price",
+  "link",
+  "image_link",
+  "brand",
+  "google_product_category",
+  "fb_product_category",
+  "quantity_to_sell_on_facebook",
+  "sale_price",
+  "sale_price_effective_date",
+  "item_group_id",
+  "gender",
+  "color",
+  "size",
+  "age_group",
+  "material",
+  "pattern",
+  "shipping",
+  "shipping_weight",
+  "offer_disclaimer",
+  "offer_disclaimer_url",
+  "video[0].url",
+  "video[0].tag[0]",
+  "gtin",
+  "product_tags[0]",
+  "product_tags[1]",
+  "style[0]",
 ];
+
+const META_GOOGLE_PRODUCT_CATEGORY = "Apparel & Accessories > Clothing > Traditional & Ceremonial Clothing > Saris";
+const META_FB_PRODUCT_CATEGORY = "Clothing & Accessories > Clothing";
+const META_BRAND = "Korasutra";
+const META_CURRENCY = "INR";
 
 function csvCell(value: unknown) {
   const text = String(value ?? "");
@@ -75,6 +105,13 @@ function sortedVariants(product: ProductFeedRow) {
     .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
 }
 
+function sortedVideos(product: ProductFeedRow) {
+  return [...(product.product_videos || [])]
+    .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+    .map((video) => String(video.url || "").trim())
+    .filter(Boolean);
+}
+
 function stockTotal(product: ProductFeedRow) {
   return sortedVariants(product).reduce((sum, variant) => sum + Number(variant.inventory_qty || 0), 0);
 }
@@ -98,65 +135,162 @@ function blouseStatus(product: ProductFeedRow) {
   return blousePieceDisplayText(Boolean(product.has_blouse_piece));
 }
 
-export function buildProductExportCsv(products: ProductFeedRow[] = [], options: ProductFeedOptions = {}) {
-  const rows = products.map((product) => [
-    product.id || "",
-    product.handle || "",
+function stripHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function clampText(value: string, maxLength: number) {
+  return value.length > maxLength ? value.slice(0, maxLength - 1).trimEnd() : value;
+}
+
+function catalogDescription(product: ProductFeedRow) {
+  const description = stripHtml(product.short_description || product.description);
+  if (description) return clampText(description, 9999);
+  const fabric = product.fabric ? `${product.fabric} ` : "";
+  const color = product.color ? `${product.color} ` : "";
+  return clampText(`${color}${fabric}${product.title || "handcrafted saree"} from Korasutra.`, 9999);
+}
+
+function moneyAmount(value: unknown) {
+  const amount = Number(value || 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function metaMoney(value: unknown) {
+  return `${moneyAmount(value).toFixed(2)} ${META_CURRENCY}`;
+}
+
+function catalogPrice(product: ProductFeedRow) {
+  const price = moneyAmount(product.price);
+  const compareAtPrice = moneyAmount(product.compare_at_price);
+  return compareAtPrice > price ? compareAtPrice : price;
+}
+
+function catalogSalePrice(product: ProductFeedRow) {
+  const price = moneyAmount(product.price);
+  const compareAtPrice = moneyAmount(product.compare_at_price);
+  return compareAtPrice > price ? metaMoney(price) : "";
+}
+
+function catalogId(product: ProductFeedRow) {
+  return skuList(product)[0] || product.id || product.handle || "";
+}
+
+function availability(product: ProductFeedRow) {
+  return product.status === "active" && stockTotal(product) > 0 ? "in stock" : "out of stock";
+}
+
+function productTag(product: ProductFeedRow, index: number) {
+  return (product.tags || []).filter(Boolean)[index] || "";
+}
+
+function metaCatalogRow(product: ProductFeedRow, options: ProductFeedOptions) {
+  const images = sortedImages(product);
+  const videos = sortedVideos(product);
+  return [
+    catalogId(product),
     product.title || "",
-    product.category?.name || product.category?.slug || "",
-    product.status || "",
-    product.price ?? "",
-    product.compare_at_price ?? "",
+    catalogDescription(product),
+    availability(product),
+    "new",
+    metaMoney(catalogPrice(product)),
+    productUrl(product, options.siteUrl),
+    images[0] || "",
+    META_BRAND,
+    META_GOOGLE_PRODUCT_CATEGORY,
+    META_FB_PRODUCT_CATEGORY,
     stockTotal(product),
+    catalogSalePrice(product),
+    "",
+    product.id || product.handle || catalogId(product),
+    "unisex",
+    product.color || "",
+    "",
+    "adult",
     product.fabric || "",
     product.technique || "",
-    product.color || "",
+    "IN::Standard:0.00 INR",
+    "",
+    "",
+    "",
+    videos[0] || "",
+    videos[0] ? "Product" : "",
+    "",
+    productTag(product, 0) || product.fabric || "",
+    productTag(product, 1) || product.technique || "",
     blouseStatus(product),
-    productUrl(product, options.siteUrl),
-    sortedImages(product).join(", "),
-    skuList(product).join(", "),
-  ].map(csvCell).join(","));
+  ];
+}
+
+export function buildMetaCatalogCsv(products: ProductFeedRow[] = [], options: ProductFeedOptions = {}) {
+  const rows = products.map((product) => metaCatalogRow(product, options).map(csvCell).join(","));
 
   return [
-    PRODUCT_EXPORT_HEADERS.join(","),
+    META_CATALOG_HEADERS.join(","),
     ...rows,
   ].join("\n");
 }
 
-export function buildProductFeedXml(products: ProductFeedRow[] = [], options: ProductFeedOptions = {}) {
+function gField(name: string, value: unknown) {
+  const text = String(value ?? "");
+  return text ? `      <g:${name}>${xmlText(text)}</g:${name}>` : "";
+}
+
+export function buildMetaCatalogXml(products: ProductFeedRow[] = [], options: ProductFeedOptions = {}) {
   const entries = products.map((product) => {
-    const images = sortedImages(product)
-      .map((image) => `    <image>${xmlText(image)}</image>`)
-      .join("\n");
-    const skus = skuList(product)
-      .map((sku) => `    <sku>${xmlText(sku)}</sku>`)
+    const images = sortedImages(product);
+    const videos = sortedVideos(product);
+    const additionalImages = images.slice(1, 10)
+      .map((image) => gField("additional_image_link", image))
+      .filter(Boolean)
       .join("\n");
 
     return [
-      "  <product>",
-      `    <id>${xmlText(product.id || "")}</id>`,
-      `    <handle>${xmlText(product.handle || "")}</handle>`,
-      `    <title>${xmlText(product.title || "")}</title>`,
-      `    <category>${xmlText(product.category?.name || product.category?.slug || "")}</category>`,
-      `    <status>${xmlText(product.status || "")}</status>`,
-      `    <price>${xmlText(product.price ?? "")}</price>`,
-      `    <compare_at_price>${xmlText(product.compare_at_price ?? "")}</compare_at_price>`,
-      `    <stock>${xmlText(stockTotal(product))}</stock>`,
-      `    <fabric>${xmlText(product.fabric || "")}</fabric>`,
-      `    <technique>${xmlText(product.technique || "")}</technique>`,
-      `    <color>${xmlText(product.color || "")}</color>`,
-      `    <blouse_piece>${xmlText(blouseStatus(product))}</blouse_piece>`,
-      `    <url>${xmlText(productUrl(product, options.siteUrl))}</url>`,
-      images,
-      skus,
-      "  </product>",
+      "    <item>",
+      gField("id", catalogId(product)),
+      gField("title", product.title || ""),
+      gField("description", catalogDescription(product)),
+      gField("availability", availability(product)),
+      gField("condition", "new"),
+      gField("price", metaMoney(catalogPrice(product))),
+      gField("sale_price", catalogSalePrice(product)),
+      gField("link", productUrl(product, options.siteUrl)),
+      gField("image_link", images[0] || ""),
+      additionalImages,
+      gField("brand", META_BRAND),
+      gField("google_product_category", META_GOOGLE_PRODUCT_CATEGORY),
+      gField("fb_product_category", META_FB_PRODUCT_CATEGORY),
+      gField("quantity_to_sell_on_facebook", stockTotal(product)),
+      gField("item_group_id", product.id || product.handle || catalogId(product)),
+      gField("gender", "unisex"),
+      gField("color", product.color || ""),
+      gField("age_group", "adult"),
+      gField("material", product.fabric || ""),
+      gField("pattern", product.technique || ""),
+      gField("shipping", "IN::Standard:0.00 INR"),
+      gField("video", videos[0] || ""),
+      gField("custom_label_0", productTag(product, 0) || product.fabric || ""),
+      gField("custom_label_1", productTag(product, 1) || product.technique || ""),
+      gField("style", blouseStatus(product)),
+      "    </item>",
     ].filter(Boolean).join("\n");
   }).join("\n");
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    "<products>",
+    '<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">',
+    "  <channel>",
+    "    <title>Korasutra Meta Catalog</title>",
+    "    <link>https://korasutra.com</link>",
+    "    <description>Live product catalog for Meta Commerce Manager.</description>",
     entries,
-    "</products>",
+    "  </channel>",
+    "</rss>",
   ].join("\n");
 }
+
+export const buildProductExportCsv = buildMetaCatalogCsv;
+export const buildProductFeedXml = buildMetaCatalogXml;

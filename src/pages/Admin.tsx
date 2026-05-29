@@ -77,11 +77,12 @@ import { buildAdminProductImages, findNonCloudinaryMediaUrls, findShopifyCdnMedi
 import { validateCompareAtPrice } from "@/lib/productPricing";
 import { buildProductExportCsv, buildProductFeedXml } from "@/lib/productFeeds";
 import { blousePieceDisplayText } from "@/lib/productPresentation";
+import { seoAuditEvents, seoPractices } from "@/lib/seoPractices";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
 
-type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "reviews" | "customers" | "coupons" | "sales" | "journals" | "settings";
+type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "reviews" | "customers" | "coupons" | "sales" | "journals" | "seo" | "settings";
 type PendingProductImageUpload = { dataUrl: string; fileName: string; contentType: string };
 
 const navItems: Array<{ id: AdminSection; label: string; icon: typeof LayoutDashboard }> = [
@@ -94,6 +95,7 @@ const navItems: Array<{ id: AdminSection; label: string; icon: typeof LayoutDash
   { id: "coupons", label: "Coupons", icon: Tags },
   { id: "sales", label: "Sales", icon: BarChart3 },
   { id: "journals", label: "Journals", icon: FileText },
+  { id: "seo", label: "SEO Practices", icon: Search },
   { id: "settings", label: "Settings", icon: Shield },
 ];
 
@@ -101,6 +103,8 @@ const orderStatuses = ["pending_payment", "confirmed", "processing", "shipped", 
 const paymentStatuses = ["pending", "paid", "failed", "refunded"];
 const LOCAL_ADMIN_TOKEN_PREFIX = "local-admin-";
 const PRODUCT_FEED_SITE_URL = "https://korasutra.com";
+const PUBLIC_META_CATALOG_CSV_URL = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/meta-catalog-feed?format=csv` : "";
+const PUBLIC_META_CATALOG_XML_URL = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/meta-catalog-feed?format=xml` : "";
 
 function statusBadge(status: string) {
   if (["paid", "confirmed", "delivered"].includes(status)) return "bg-green-100 text-green-800 border-green-200";
@@ -188,6 +192,8 @@ export default function Admin() {
     videoContentType: "",
     sku: "",
     inventoryQty: "1",
+    seoTitle: "",
+    seoDescription: "",
     catalogSelection: { fabric: [] as string[], pattern: [] as string[], occasion: [] as string[] },
   });
   const [couponForm, setCouponForm] = useState({
@@ -240,7 +246,7 @@ export default function Admin() {
     publishedAt: "",
   });
 
-  const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", imageUploads: [], videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
+  const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", imageUploads: [], videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", seoTitle: "", seoDescription: "", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
   const resetCouponForm = () => setCouponForm({ id: "", code: "", description: "", status: "active", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscountCap: "", usageLimitTotal: "", usageLimitPerCustomer: "", firstOrderOnly: false, startAt: "", endAt: "", neverExpires: false, appliesTo: "all", includedProductIds: "", includedCategorySlugs: "", includedTags: "", excludedProductIds: "", excludedCategorySlugs: "", excludeSaleItems: false, canCombineWithCoupons: false, canCombineWithSalePrices: true, autoApply: false, displayOnWebsite: false, priority: "0", buyQuantity: "", getQuantity: "" });
   const resetJournalForm = () => setJournalForm({ id: "", title: "", slug: "", excerpt: "", content: "", imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", category: "Journal", author: "Kora Sutra", readTime: "3 min read", keywords: "", seoTitle: "", seoDescription: "", status: "draft", publishedAt: "" });
   const isLocalAdmin = canUseLocalAdminMode(adminToken, LOCAL_ADMIN_FALLBACK_ENABLED);
@@ -644,6 +650,8 @@ export default function Admin() {
       videoContentType: firstVideo?.content_type || "",
       sku: firstVariant?.sku || "",
       inventoryQty: String(firstVariant?.inventory_qty ?? 1),
+      seoTitle: product.seo_title || "",
+      seoDescription: product.seo_description || "",
       catalogSelection: selectionFromTags(product.tags || []),
     });
     setProductTab("add");
@@ -921,14 +929,20 @@ export default function Admin() {
         orderNumber: order.order_number,
         customerId: order.customer_id,
       });
+      const wasCancelled = (updates.status ?? order.status) === "cancelled";
+      const notificationIssue = result.emailSent === false || (wasCancelled && result.whatsappSent === false);
       toast.success(
         isLocalAdmin
           ? "Order updated locally"
-          : result.emailSent === false
-            ? "Order updated; customer email was not sent"
-            : "Order updated and customer notified",
+          : notificationIssue
+            ? "Order updated; one customer notification was not sent"
+            : wasCancelled
+              ? "Order cancelled and WhatsApp sent"
+              : "Order updated and customer notified",
         {
-          description: result.emailSent === false ? result.emailReason || "Check Resend configuration and customer email." : undefined,
+          description: notificationIssue
+            ? [result.emailSent === false ? result.emailReason : "", wasCancelled && result.whatsappSent === false ? result.whatsappReason : ""].filter(Boolean).join(" ")
+            : undefined,
         },
       );
       fetchAdminData();
@@ -1139,9 +1153,19 @@ export default function Admin() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `korasutra-products-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `korasutra-meta-catalog-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const copyMetaFeedUrl = async (url: string, label: string) => {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(`${label} feed URL copied`);
+    } catch {
+      toast.error("Unable to copy feed URL");
+    }
   };
 
   if (!adminToken) {
@@ -1281,19 +1305,28 @@ export default function Admin() {
                 <Panel title={`Products (${filteredProducts.length})`}>
                   <div className="flex flex-wrap justify-end gap-2 mb-3">
                     <Button type="button" variant="outline" size="sm" onClick={exportProducts} disabled={!data.products.length}>
-                      <Download className="w-4 h-4 mr-2" />Download CSV
+                      <Download className="w-4 h-4 mr-2" />Download Meta CSV
                     </Button>
                     {productXmlFeedUrl ? (
                       <Button asChild type="button" variant="outline" size="sm">
-                        <a href={productXmlFeedUrl} target="_blank" rel="noreferrer" download="korasutra-product-feed.xml">
-                          <FileText className="w-4 h-4 mr-2" />XML Feed Link
+                        <a href={productXmlFeedUrl} target="_blank" rel="noreferrer" download="korasutra-meta-catalog.xml">
+                          <FileText className="w-4 h-4 mr-2" />Download Meta XML
                         </a>
                       </Button>
                     ) : (
                       <Button type="button" variant="outline" size="sm" disabled>
-                        <FileText className="w-4 h-4 mr-2" />XML Feed Link
+                        <FileText className="w-4 h-4 mr-2" />Download Meta XML
                       </Button>
                     )}
+                    <Button type="button" variant="outline" size="sm" onClick={() => copyMetaFeedUrl(PUBLIC_META_CATALOG_CSV_URL, "CSV")} disabled={!PUBLIC_META_CATALOG_CSV_URL}>
+                      <Link2 className="w-4 h-4 mr-2" />Copy Feed URL
+                    </Button>
+                  </div>
+                  <div className="mb-4 rounded-sm border border-border bg-secondary/30 p-3 text-xs text-muted-foreground">
+                    <p className="font-body font-medium text-foreground">Meta Commerce catalog feeds</p>
+                    <p>CSV: {PUBLIC_META_CATALOG_CSV_URL || "Configure VITE_SUPABASE_URL to show the public feed URL."}</p>
+                    <p>XML: {PUBLIC_META_CATALOG_XML_URL || "Configure VITE_SUPABASE_URL to show the XML feed URL."}</p>
+                    <p className="mt-1">If META_CATALOG_FEED_TOKEN is set in Supabase, append the token query parameter before adding this URL to Commerce Manager.</p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -1400,6 +1433,8 @@ export default function Admin() {
                     </div>
                     <Field label="Short Description" className="md:col-span-2"><Input value={productForm.shortDescription} onChange={(e) => setProductForm({ ...productForm, shortDescription: e.target.value })} /></Field>
                     <Field label="Description" className="md:col-span-2"><Textarea value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} rows={5} /></Field>
+                    <Field label="SEO Title" className="md:col-span-2"><Input value={productForm.seoTitle} onChange={(e) => setProductForm({ ...productForm, seoTitle: e.target.value })} placeholder="Korasutra product title for Google" /></Field>
+                    <Field label="SEO Description" className="md:col-span-2"><Input value={productForm.seoDescription} onChange={(e) => setProductForm({ ...productForm, seoDescription: e.target.value })} placeholder="Short search description for this product" /></Field>
                     <div className="md:col-span-2 flex gap-2">
                       <Button type="submit">Save & Publish Product</Button>
                       <Button type="button" variant="outline" onClick={resetProductForm}>Clear</Button>
@@ -1773,6 +1808,85 @@ export default function Admin() {
             </Tabs>
           )}
 
+          {section === "seo" && (
+            <div className="space-y-5">
+              <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-4">
+                <Panel title="SEO Control Room">
+                  <div className="grid sm:grid-cols-3 gap-3 mb-5">
+                    <div className="border border-border rounded-sm p-4 bg-green-50">
+                      <p className="text-xs uppercase tracking-wide text-green-700">Indexable routes</p>
+                      <p className="text-3xl font-heading mt-2">31</p>
+                      <p className="text-xs text-green-700/80 mt-1">Public sitemap URLs</p>
+                    </div>
+                    <div className="border border-border rounded-sm p-4 bg-blue-50">
+                      <p className="text-xs uppercase tracking-wide text-blue-700">Protected routes</p>
+                      <p className="text-3xl font-heading mt-2">8</p>
+                      <p className="text-xs text-blue-700/80 mt-1">Noindex / X-Robots</p>
+                    </div>
+                    <div className="border border-border rounded-sm p-4 bg-amber-50">
+                      <p className="text-xs uppercase tracking-wide text-amber-700">Redirect groups</p>
+                      <p className="text-3xl font-heading mt-2">11</p>
+                      <p className="text-xs text-amber-700/80 mt-1">Permanent 301 rules</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {seoPractices.map((practice) => (
+                      <div key={practice.area} className="border border-border rounded-sm p-4 bg-background">
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Shield className="w-4 h-4 text-primary" />
+                              <h3 className="font-heading text-base">{practice.area}</h3>
+                            </div>
+                            <p className="text-sm text-foreground/80 mt-2">{practice.summary}</p>
+                          </div>
+                          <SeoStatusBadge status={practice.status} />
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-3 mt-3 text-xs text-muted-foreground">
+                          <p><span className="font-medium text-foreground">Why:</span> {practice.why}</p>
+                          <p><span className="font-medium text-foreground">Evidence:</span> {practice.evidence}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+
+                <div className="space-y-4">
+                  <Panel title="SEO Implementation Log">
+                    <div className="space-y-3">
+                      {seoAuditEvents.map((event, index) => (
+                        <div key={event} className="flex gap-3 text-sm">
+                          <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-heading flex-shrink-0">
+                            {index + 1}
+                          </div>
+                          <p className="text-foreground/80">{event}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+
+                  <Panel title="Search Console / Meta Links">
+                    <div className="space-y-3 text-sm">
+                      <a href="https://korasutra.com/sitemap.xml" target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 border border-border rounded-sm p-3 hover:bg-secondary/40">
+                        <span>Sitemap XML</span>
+                        <Link2 className="w-4 h-4" />
+                      </a>
+                      <a href="https://korasutra.com/robots.txt" target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 border border-border rounded-sm p-3 hover:bg-secondary/40">
+                        <span>Robots.txt</span>
+                        <Link2 className="w-4 h-4" />
+                      </a>
+                      <button type="button" onClick={() => copyMetaFeedUrl(PUBLIC_META_CATALOG_CSV_URL, "Meta CSV")} className="w-full flex items-center justify-between gap-3 border border-border rounded-sm p-3 hover:bg-secondary/40 text-left disabled:opacity-60" disabled={!PUBLIC_META_CATALOG_CSV_URL}>
+                        <span>Meta Catalog Feed</span>
+                        <Link2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </Panel>
+                </div>
+              </div>
+            </div>
+          )}
+
           {section === "settings" && (
             <div className="space-y-4">
               <Panel title="Website Studio">
@@ -1946,4 +2060,17 @@ function ToggleRow({ label, checked, onCheckedChange }: { label: string; checked
       <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </label>
   );
+}
+
+function SeoStatusBadge({ status }: { status: "Live" | "Protected" | "Ready" | "Manual" }) {
+  const className =
+    status === "Live"
+      ? "bg-green-100 text-green-800 border-green-200"
+      : status === "Protected"
+        ? "bg-blue-100 text-blue-800 border-blue-200"
+        : status === "Ready"
+          ? "bg-amber-100 text-amber-800 border-amber-200"
+          : "bg-secondary text-muted-foreground border-border";
+
+  return <Badge className={className}>{status}</Badge>;
 }

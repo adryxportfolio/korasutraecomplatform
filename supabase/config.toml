@@ -41,3 +41,9 @@ verify_jwt = false
 
 [functions.my-account]
 verify_jwt = false
+
+[functions.meta-catalog-feed]
+verify_jwt = false
+
+[functions.abandoned-cart-whatsapp]
+verify_jwt = false

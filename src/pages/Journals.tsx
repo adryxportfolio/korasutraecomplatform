@@ -20,7 +20,7 @@ export default function Journals() {
   return (
     <>
       <Helmet>
-        <title>Journals | Kora Sutra — Handloom Stories, Saree Care & Textile Heritage</title>
+        <title>Journals | Korasutra - Handloom Stories, Saree Care & Textile Heritage</title>
         <meta
           name="description"
           content="Explore the Kora Sutra journals — stories of handloom revival, Tussar silk, Muslin, Kantha stitch, Jamdani weaving, Batik, block print, and how to care for your sarees. Celebrating India's textile heritage."
@@ -30,7 +30,7 @@ export default function Journals() {
           content="Kora Sutra journal, handloom blog, saree blog, Tussar silk guide, Muslin saree, Kantha stitch, Jamdani weaving, Baluchari saree, block print saree, Batik saree, silk saree care, Indian textile heritage, handwoven saree India, sustainable fashion India, saree draping guide, Bengal handloom, artisan craft India"
         />
         <link rel="canonical" href="https://korasutra.com/journals" />
-        <meta property="og:title" content="Journals | Kora Sutra — Textile Stories & Heritage" />
+        <meta property="og:title" content="Journals | Korasutra - Textile Stories & Heritage" />
         <meta property="og:description" content="Stories of handloom revival, artisan craft, and India's rich textile traditions." />
         <meta property="og:url" content="https://korasutra.com/journals" />
         <meta property="og:type" content="blog" />

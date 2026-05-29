@@ -64,7 +64,7 @@ export default function Cart() {
   return (
     <>
       <Helmet>
-        <title>Secure Cart - Kora Sutra</title>
+        <title>Secure Cart - Korasutra</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
       <Navbar />

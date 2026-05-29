@@ -627,6 +627,11 @@ export default function ProductDetail() {
   if (!product) {
     return (
       <>
+        <Helmet>
+          <title>Product Not Found | Korasutra</title>
+          <meta name="robots" content="noindex, nofollow" />
+          <link rel="canonical" href="https://korasutra.com/collections/all" />
+        </Helmet>
         <Navbar />
         <main className="min-h-screen pt-32 pb-16">
           <div className="container mx-auto px-4 text-center">
@@ -653,9 +658,9 @@ export default function ProductDetail() {
   const currentSKU = formatSKU(currentVariant?.sku);
 
   // Generate SEO data
-  const productDescription = product.description 
+  const productDescription = product.seoDescription || (product.description 
     ? product.description.slice(0, 155).replace(/<[^>]*>/g, '') + '...'
-    : `Shop ${product.title} at Kora Sutra. Premium handcrafted saree from Bengal. Free shipping across India.`;
+    : `Shop ${product.title} at Korasutra. Premium handcrafted saree from Bengal. Free shipping across India.`);
   
   const productImage = images[0]?.node.url || 'https://korasutra.com/og-image.png';
   const productPriceValue = currentVariant?.price.amount || '0';
@@ -668,7 +673,7 @@ export default function ProductDetail() {
     image: images.map(img => img.node.url),
     brand: {
       "@type": "Brand",
-      name: "Kora Sutra"
+      name: "Korasutra"
     },
     sku: currentSKU,
     offers: {
@@ -681,7 +686,7 @@ export default function ProductDetail() {
         : "https://schema.org/OutOfStock",
       seller: {
         "@type": "Organization",
-        name: "Kora Sutra"
+        name: "Korasutra"
       }
     }
   };
@@ -699,12 +704,12 @@ export default function ProductDetail() {
   return (
     <>
       <Helmet>
-        <title>{product.title} | Kora Sutra - Handcrafted Sarees</title>
+        <title>{product.seoTitle || `${product.title} | Korasutra - Handcrafted Sarees`}</title>
         <meta name="description" content={productDescription} />
-        <meta name="keywords" content={`${product.title}, Kora Sutra, handcrafted saree, buy saree online, ${extractFabricFromTitle(product.title)} saree, Indian saree`} />
+        <meta name="keywords" content={`${product.title}, Korasutra, Kora Sutra, handcrafted saree, buy saree online, ${extractFabricFromTitle(product.title)} saree, Indian saree`} />
         <link rel="canonical" href={`https://korasutra.com/products/${handle}`} />
         
-        <meta property="og:title" content={`${product.title} | Kora Sutra`} />
+        <meta property="og:title" content={`${product.title} | Korasutra`} />
         <meta property="og:description" content={productDescription} />
         <meta property="og:image" content={productImage} />
         <meta property="og:url" content={`https://korasutra.com/products/${handle}`} />
@@ -713,7 +718,7 @@ export default function ProductDetail() {
         <meta property="product:price:currency" content="INR" />
         
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={`${product.title} | Kora Sutra`} />
+        <meta name="twitter:title" content={`${product.title} | Korasutra`} />
         <meta name="twitter:description" content={productDescription} />
         <meta name="twitter:image" content={productImage} />
         

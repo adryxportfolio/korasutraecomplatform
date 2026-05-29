@@ -487,7 +487,7 @@ export default function Checkout() {
   return (
     <>
       <Helmet>
-        <title>Checkout - Kora Sutra</title>
+        <title>Checkout - Korasutra</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
       <Navbar />

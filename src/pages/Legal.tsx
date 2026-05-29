@@ -16,7 +16,7 @@ export default function Legal() {
   return (
     <>
       <Helmet>
-        <title>Legal Disclaimer - Kora Sutra | Business & Liability Information</title>
+        <title>Legal Disclaimer - Korasutra | Business & Liability Information</title>
         <meta 
           name="description" 
           content="Read Kora Sutra's legal disclaimer. Understand our business entity, liability limitations, and proprietor responsibilities for handcrafted saree sales." 
@@ -24,14 +24,14 @@ export default function Legal() {
         <meta name="keywords" content="Kora Sutra legal, legal disclaimer, business information, liability" />
         <link rel="canonical" href="https://korasutra.com/legal" />
         
-        <meta property="og:title" content="Legal Disclaimer - Kora Sutra" />
+        <meta property="og:title" content="Legal Disclaimer - Korasutra" />
         <meta property="og:description" content="Legal information including business registration and liability details." />
         <meta property="og:url" content="https://korasutra.com/legal" />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="https://korasutra.com/og-image.png" />
         
         <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content="Legal Disclaimer - Kora Sutra" />
+        <meta name="twitter:title" content="Legal Disclaimer - Korasutra" />
         <meta name="twitter:description" content="Legal information for Kora Sutra including business and liability details." />
         
         <script type="application/ld+json">{JSON.stringify(breadcrumbSchema)}</script>

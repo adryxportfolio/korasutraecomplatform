@@ -79,7 +79,7 @@ export default function AddToCartRedirect() {
   return (
     <>
       <Helmet>
-        <title>Add to Cart - Kora Sutra</title>
+        <title>Add to Cart - Korasutra</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
       <Navbar />

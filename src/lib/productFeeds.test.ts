@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildProductExportCsv, buildProductFeedXml } from "./productFeeds";
+import { buildMetaCatalogCsv, buildMetaCatalogXml, buildProductExportCsv } from "./productFeeds";
 
 const productRows = [
   {
@@ -38,26 +38,29 @@ const productRows = [
 ];
 
 describe("admin product exports", () => {
-  test("builds a CSV product list with escaped fields and blouse status", () => {
+  test("builds a Meta catalog CSV with the uploaded Commerce Manager column format", () => {
     const csv = buildProductExportCsv(productRows);
 
     expect(csv.split("\n")[0]).toBe(
-      "ID,Handle,Title,Category,Status,Price,Compare-at Price,Stock,Fabric,Technique,Color,Blouse Piece,Product URL,Image URLs,SKUs",
+      "id,title,description,availability,condition,price,link,image_link,brand,google_product_category,fb_product_category,quantity_to_sell_on_facebook,sale_price,sale_price_effective_date,item_group_id,gender,color,size,age_group,material,pattern,shipping,shipping_weight,offer_disclaimer,offer_disclaimer_url,video[0].url,video[0].tag[0],gtin,product_tags[0],product_tags[1],style[0]",
     );
     expect(csv).toContain('"Red ""Festive"" Saree"');
-    expect(csv).toContain('"Block, Print"');
-    expect(csv).toContain("Blouse Piece Included");
-    expect(csv).toContain("KS-RED, KS-RED-B");
+    expect(csv).toContain("in stock,new,2499.00 INR,https://korasutra.com/products/red-festive-saree");
+    expect(csv).toContain("1999.00 INR,,product-1,unisex,Red,,adult,Muslin");
+    expect(csv).toContain("Apparel & Accessories > Clothing > Traditional & Ceremonial Clothing > Saris");
+    expect(buildMetaCatalogCsv(productRows)).toBe(csv);
   });
 
-  test("builds an XML feed link payload for all products", () => {
-    const xml = buildProductFeedXml(productRows, { siteUrl: "https://korasutra.com" });
+  test("builds a Meta catalog XML feed with Google Merchant compatible g fields", () => {
+    const xml = buildMetaCatalogXml(productRows, { siteUrl: "https://korasutra.com" });
 
     expect(xml).toContain('<?xml version="1.0" encoding="UTF-8"?>');
-    expect(xml).toContain("<products>");
-    expect(xml).toContain("<title>Blue &amp; Gold Saree</title>");
-    expect(xml).toContain("<blouse_piece>Blouse Piece Not Included</blouse_piece>");
-    expect(xml).toContain("<url>https://korasutra.com/products/red-festive-saree</url>");
-    expect(xml).toContain("<image>https://res.cloudinary.com/demo/image/upload/red-front.jpg</image>");
+    expect(xml).toContain('<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">');
+    expect(xml).toContain("<g:id>KS-RED</g:id>");
+    expect(xml).toContain("<g:title>Red &quot;Festive&quot; Saree</g:title>");
+    expect(xml).toContain("<g:availability>in stock</g:availability>");
+    expect(xml).toContain("<g:price>2499.00 INR</g:price>");
+    expect(xml).toContain("<g:sale_price>1999.00 INR</g:sale_price>");
+    expect(xml).toContain("<g:link>https://korasutra.com/products/red-festive-saree</g:link>");
   });
 });

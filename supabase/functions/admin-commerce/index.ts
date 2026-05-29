@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { aisensyConfig, sendAisensyTemplateMessage } from "../_shared/aisensy.ts";
+import { buildOrderCancelledTemplateMessage, normalizeWhatsappDestination } from "../_shared/aisensyPayload.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -145,6 +147,26 @@ async function sendOrderUpdateEmail(order: any) {
     return { sent: false, reason };
   }
   return { sent: true, reason: "" };
+}
+
+async function sendOrderCancelledWhatsapp(order: any) {
+  const config = aisensyConfig();
+  const destination = normalizeWhatsappDestination("+91", order?.contact_phone || order?.ship_phone || "");
+  if (!destination || destination.length < 13) {
+    return { sent: false, reason: "Customer WhatsApp phone is missing" };
+  }
+
+  const payload = buildOrderCancelledTemplateMessage({
+    apiKey: config.apiKey,
+    destination,
+    customerName: order?.ship_full_name,
+    orderNumber: order?.order_number,
+    orderTotal: Number(order?.total || 0).toFixed(2),
+    templateName: config.orderCancelledTemplateName,
+    source: config.source,
+  });
+
+  return sendAisensyTemplateMessage(payload, config.endpoint);
 }
 
 async function saveProduct(supabase: any, product: any) {
@@ -399,6 +421,12 @@ serve(async (req: Request): Promise<Response> => {
       }
 
       if (body.action === "update-order") {
+        const { data: previousOrder } = await supabase
+          .from("orders")
+          .select("status")
+          .eq("id", body.orderId)
+          .maybeSingle();
+
         const updates: Record<string, unknown> = {
           status: body.status,
           payment_status: body.paymentStatus,
@@ -420,6 +448,9 @@ serve(async (req: Request): Promise<Response> => {
           .eq("id", body.orderId)
           .single();
         const emailResult = updatedOrder ? await sendOrderUpdateEmail(updatedOrder) : { sent: false, reason: "Updated order could not be loaded" };
+        const whatsappResult = updatedOrder && body.status === "cancelled" && previousOrder?.status !== "cancelled"
+          ? await sendOrderCancelledWhatsapp(updatedOrder)
+          : { sent: false, reason: "Order was not newly cancelled" };
         await notifyCommerceSync({
           action: "order-updated",
           table: "orders",
@@ -427,7 +458,13 @@ serve(async (req: Request): Promise<Response> => {
           orderNumber: updatedOrder?.order_number,
           customerId: updatedOrder?.customer_id,
         });
-        return json({ success: true, emailSent: emailResult.sent, emailReason: emailResult.reason });
+        return json({
+          success: true,
+          emailSent: emailResult.sent,
+          emailReason: emailResult.reason,
+          whatsappSent: whatsappResult.sent,
+          whatsappReason: whatsappResult.reason,
+        });
       }
 
       if (body.action === "adjust-inventory") {

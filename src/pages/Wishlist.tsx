@@ -49,7 +49,7 @@ export default function Wishlist() {
   return (
     <>
       <Helmet>
-        <title>My Wishlist - Kora Sutra | Saved Handcrafted Sarees</title>
+        <title>My Wishlist - Korasutra | Saved Handcrafted Sarees</title>
         <meta name="description" content="View your saved sarees at Kora Sutra. Keep track of your favorite handcrafted sarees and add them to cart when ready." />
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>

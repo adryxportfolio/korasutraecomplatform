@@ -63,7 +63,7 @@ export function buildAdminProductImages({
     .map((image) => ({
       ...image,
       url: String(image.url || "").trim(),
-      altText: image.altText || title,
+      altText: ("altText" in image ? image.altText : undefined) || title,
     }))
     .filter((image) => {
       if (!image.url || seen.has(image.url)) return false;

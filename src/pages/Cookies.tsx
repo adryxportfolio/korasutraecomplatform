@@ -15,7 +15,7 @@ export default function Cookies() {
   return (
     <>
       <Helmet>
-        <title>Cookie Policy - Kora Sutra | How We Use Cookies</title>
+        <title>Cookie Policy - Korasutra | How We Use Cookies</title>
         <meta 
           name="description" 
           content="Learn about how Kora Sutra uses cookies on our website. Understand essential, analytics, and functional cookies for a better shopping experience." 
@@ -23,14 +23,14 @@ export default function Cookies() {
         <meta name="keywords" content="Kora Sutra cookies, cookie policy, website cookies, privacy" />
         <link rel="canonical" href="https://korasutra.com/cookies" />
         
-        <meta property="og:title" content="Cookie Policy - Kora Sutra" />
+        <meta property="og:title" content="Cookie Policy - Korasutra" />
         <meta property="og:description" content="Understand how Kora Sutra uses cookies to enhance your shopping experience." />
         <meta property="og:url" content="https://korasutra.com/cookies" />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="https://korasutra.com/og-image.png" />
         
         <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content="Cookie Policy - Kora Sutra" />
+        <meta name="twitter:title" content="Cookie Policy - Korasutra" />
         <meta name="twitter:description" content="Understand how Kora Sutra uses cookies to enhance your shopping experience." />
         
         <script type="application/ld+json">{JSON.stringify(breadcrumbSchema)}</script>

@@ -40,7 +40,7 @@ export default function Contact() {
   return (
     <>
       <Helmet>
-        <title>Contact Kora Sutra | Get in Touch - Customer Support</title>
+        <title>Contact Korasutra | Get in Touch - Customer Support</title>
         <meta 
           name="description" 
           content="Contact Kora Sutra for inquiries about handcrafted sarees. Reach us via phone +91 79958 62266, email customer.support@korasutra.com, or WhatsApp. We're here to help!" 
@@ -48,7 +48,7 @@ export default function Contact() {
         <meta name="keywords" content="contact Kora Sutra, Kora Sutra phone number, Kora Sutra email, customer support, saree inquiries" />
         <link rel="canonical" href="https://korasutra.com/contact" />
         
-        <meta property="og:title" content="Contact Kora Sutra | Get in Touch" />
+        <meta property="og:title" content="Contact Korasutra | Get in Touch" />
         <meta property="og:description" content="Contact us for inquiries about handcrafted sarees. Phone, email, or WhatsApp - we're here to help!" />
         <meta property="og:url" content="https://korasutra.com/contact" />
         <meta property="og:type" content="website" />

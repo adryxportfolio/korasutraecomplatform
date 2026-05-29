@@ -30,6 +30,7 @@ import ThankYou from "./pages/ThankYou";
 import { CustomerActivityTracker } from "./components/CustomerActivityTracker";
 import { CartOwnerSync } from "./components/CartOwnerSync";
 import Cart from "./pages/Cart";
+import { RouteSeoPolicy } from "./components/seo/RouteSeoPolicy";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <RouteSeoPolicy />
           <ScrollToTop />
           <CartOwnerSync />
           <CustomerActivityTracker />

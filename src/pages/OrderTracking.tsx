@@ -151,7 +151,8 @@ export default function OrderTracking() {
   return (
     <>
       <Helmet>
-        <title>Track Your Order - Kora Sutra</title>
+        <title>Track Your Order - Korasutra</title>
+        <meta name="robots" content="noindex, nofollow" />
         <meta name="description" content="Track your Kora Sutra order status, shipment details, and delivery progress." />
         <link rel="canonical" href="https://korasutra.com/order-tracking" />
       </Helmet>

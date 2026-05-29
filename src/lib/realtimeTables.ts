@@ -41,6 +41,7 @@ export type CommerceRealtimePayload = {
   productId?: string;
   couponId?: string;
   journalId?: string;
+  reviewId?: string;
   savedAt?: string;
 };
 

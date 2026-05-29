@@ -623,8 +623,8 @@ export default function Collection() {
 
   // SEO meta content
   const seoTitle = searchQuery 
-    ? `Search: ${searchQuery} - Kora Sutra Sarees`
-    : `${title} - Kora Sutra | Handcrafted Sarees Online`;
+    ? `Search: ${searchQuery} - Korasutra Sarees`
+    : `${title} - Korasutra | Handcrafted Sarees Online`;
   
   const seoDescription = searchQuery
     ? `Search results for "${searchQuery}" at Kora Sutra. Find handcrafted sarees matching your search.`
@@ -674,7 +674,8 @@ export default function Collection() {
       <Helmet>
         <title>{seoTitle}</title>
         <meta name="description" content={seoDescription} />
-        <meta name="keywords" content={`${title}, Kora Sutra, handcrafted sarees, ${slug} sarees, buy sarees online, Indian sarees`} />
+        <meta name="keywords" content={`${title}, Korasutra, Kora Sutra, handcrafted sarees, ${slug} sarees, buy sarees online, Indian sarees`} />
+        <meta name="robots" content={searchQuery || hasUrlFilters ? "noindex, follow" : "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"} />
         <link rel="canonical" href={`https://korasutra.com/collections/${slug || 'all'}`} />
         
         <meta property="og:title" content={seoTitle} />

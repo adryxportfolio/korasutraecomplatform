@@ -35,7 +35,7 @@ export default function FAQs() {
   return (
     <>
       <Helmet>
-        <title>FAQs - Kora Sutra | Frequently Asked Questions About Handcrafted Sarees</title>
+        <title>FAQs - Korasutra | Frequently Asked Questions About Handcrafted Sarees</title>
         <meta 
           name="description" 
           content="Find answers to common questions about Kora Sutra sarees - shipping, returns, payment methods, saree care, sizing, and more. Get help with your saree purchase." 
@@ -43,7 +43,7 @@ export default function FAQs() {
         <meta name="keywords" content="Kora Sutra FAQ, saree questions, shipping policy, returns policy, saree care, saree sizing, payment methods" />
         <link rel="canonical" href="https://korasutra.com/faqs" />
         
-        <meta property="og:title" content="FAQs - Kora Sutra | Frequently Asked Questions" />
+        <meta property="og:title" content="FAQs - Korasutra | Frequently Asked Questions" />
         <meta property="og:description" content="Find answers to common questions about Kora Sutra sarees - shipping, returns, payment methods, and more." />
         <meta property="og:url" content="https://korasutra.com/faqs" />
         <meta property="og:type" content="website" />

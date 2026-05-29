@@ -14,7 +14,7 @@ const NotFound = () => {
   return (
     <>
       <Helmet>
-        <title>Page Not Found - Kora Sutra | 404 Error</title>
+        <title>Page Not Found - Korasutra | 404 Error</title>
         <meta name="description" content="The page you're looking for doesn't exist. Return to Kora Sutra to browse our handcrafted sarees collection." />
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>

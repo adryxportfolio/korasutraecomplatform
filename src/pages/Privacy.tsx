@@ -15,7 +15,7 @@ export default function Privacy() {
   return (
     <>
       <Helmet>
-        <title>Privacy Policy - Kora Sutra | Data Protection & Security</title>
+        <title>Privacy Policy - Korasutra | Data Protection & Security</title>
         <meta 
           name="description" 
           content="Read Kora Sutra's privacy policy. Learn how we protect your personal data, handle payments securely, and respect your privacy when you shop for handcrafted sarees." 

@@ -15,7 +15,7 @@ export default function Returns() {
   return (
     <>
       <Helmet>
-        <title>Returns & Exchange Policy - Kora Sutra | Easy Returns for Handcrafted Sarees</title>
+        <title>Returns & Exchange Policy - Korasutra | Easy Returns for Handcrafted Sarees</title>
         <meta 
           name="description" 
           content="Learn about Kora Sutra's returns policy. Easy 7-day returns with unboxing video proof. Free returns on damaged products. Hassle-free refund process." 
@@ -23,14 +23,14 @@ export default function Returns() {
         <meta name="keywords" content="Kora Sutra returns, saree exchange, return policy, refund policy, easy returns" />
         <link rel="canonical" href="https://korasutra.com/returns" />
         
-        <meta property="og:title" content="Returns & Exchange Policy - Kora Sutra" />
+        <meta property="og:title" content="Returns & Exchange Policy - Korasutra" />
         <meta property="og:description" content="Easy 7-day returns with hassle-free refund process for handcrafted sarees." />
         <meta property="og:url" content="https://korasutra.com/returns" />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="https://korasutra.com/og-image.png" />
         
         <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content="Returns & Exchange Policy - Kora Sutra" />
+        <meta name="twitter:title" content="Returns & Exchange Policy - Korasutra" />
         <meta name="twitter:description" content="Easy 7-day returns with hassle-free refund process for handcrafted sarees." />
         
         <script type="application/ld+json">{JSON.stringify(breadcrumbSchema)}</script>

@@ -67,7 +67,7 @@ export default function JournalArticle() {
     author: { "@type": "Person", name: article.author },
     publisher: {
       "@type": "Organization",
-      name: "Kora Sutra",
+      name: "Korasutra",
       logo: { "@type": "ImageObject", url: "https://korasutra.com/favicon.png" }
     },
     mainEntityOfPage: `https://korasutra.com/journals/${article.slug}`,
@@ -79,11 +79,11 @@ export default function JournalArticle() {
   return (
     <>
       <Helmet>
-        <title>{article.title} | Kora Sutra Journals</title>
+        <title>{article.title} | Korasutra Journals</title>
         <meta name="description" content={article.excerpt} />
         <meta name="keywords" content={article.keywords.join(', ')} />
         <link rel="canonical" href={`https://korasutra.com/journals/${article.slug}`} />
-        <meta property="og:title" content={`${article.title} | Kora Sutra`} />
+        <meta property="og:title" content={`${article.title} | Korasutra`} />
         <meta property="og:description" content={article.excerpt} />
         <meta property="og:image" content={article.image} />
         <meta property="og:url" content={`https://korasutra.com/journals/${article.slug}`} />

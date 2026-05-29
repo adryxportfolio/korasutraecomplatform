@@ -1,6 +1,33 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist-bun",
+  "redirects": [
+    { "source": "/collection/:slug", "destination": "/collections/:slug", "permanent": true },
+    { "source": "/collections", "destination": "/collections/all", "permanent": true },
+    { "source": "/products", "destination": "/collections/all", "permanent": true },
+    { "source": "/product/:handle", "destination": "/products/:handle", "permanent": true },
+    { "source": "/shop", "destination": "/collections/all", "permanent": true },
+    { "source": "/sarees", "destination": "/collections/all", "permanent": true },
+    { "source": "/saree", "destination": "/collections/all", "permanent": true },
+    { "source": "/pages/about-us", "destination": "/about", "permanent": true },
+    { "source": "/pages/contact-us", "destination": "/contact", "permanent": true },
+    { "source": "/kora-sutra", "destination": "/", "permanent": true },
+    { "source": "/korasutra-official", "destination": "/", "permanent": true }
+  ],
+  "headers": [
+    {
+      "source": "/(admin|dashboard|account|checkout|cart|thank-you|order-tracking)(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

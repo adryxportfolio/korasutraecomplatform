@@ -15,7 +15,7 @@ export default function Shipping() {
   return (
     <>
       <Helmet>
-        <title>Shipping Policy - Kora Sutra | Delivery Information for Handcrafted Sarees</title>
+        <title>Shipping Policy - Korasutra | Delivery Information for Handcrafted Sarees</title>
         <meta 
           name="description" 
           content="Learn about Kora Sutra's shipping policy. We deliver handcrafted sarees across India. Metro cities: 3-5 days, Tier 2 cities: 5-7 days. Free shipping available." 
@@ -23,14 +23,14 @@ export default function Shipping() {
         <meta name="keywords" content="Kora Sutra shipping, saree delivery, shipping policy India, free shipping sarees, delivery time" />
         <link rel="canonical" href="https://korasutra.com/shipping" />
         
-        <meta property="og:title" content="Shipping Policy - Kora Sutra" />
+        <meta property="og:title" content="Shipping Policy - Korasutra" />
         <meta property="og:description" content="Learn about our shipping policy. We deliver handcrafted sarees across India." />
         <meta property="og:url" content="https://korasutra.com/shipping" />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="https://korasutra.com/og-image.png" />
         
         <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content="Shipping Policy - Kora Sutra" />
+        <meta name="twitter:title" content="Shipping Policy - Korasutra" />
         <meta name="twitter:description" content="Learn about our shipping policy for handcrafted sarees delivery across India." />
         
         <script type="application/ld+json">{JSON.stringify(breadcrumbSchema)}</script>
