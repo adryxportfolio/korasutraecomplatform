@@ -79,10 +79,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="dns-prefetch" href="https://cdn.shopify.com" />
+    <link rel="dns-prefetch" href="https://connect.facebook.net" />
     
     <!-- Language and Alternate URLs -->
     <link rel="alternate" hreflang="en-IN" href="https://korasutra.com/" />
     <link rel="alternate" hreflang="x-default" href="https://korasutra.com/" />
+
+    <!-- Meta / Facebook Pixel: AI Sensy WhatsApp events and Korasutra pixel. PageView is fired by the React route tracker. -->
+    <script>
+      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+      n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+      document,'script','https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', '1309757671041283');
+      fbq('init', '1850165549038032');
+      fbq('init', '1933328504239270');
+    </script>
   </head>
 
   <body>
@@ -90,6 +103,13 @@
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-W9F8M4JC"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <!-- End Google Tag Manager (noscript) -->
+
+    <!-- Meta / Facebook Pixel noscript fallbacks -->
+    <noscript>
+      <img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1309757671041283&ev=PageView&noscript=1" alt="" />
+      <img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1850165549038032&ev=PageView&noscript=1" alt="" />
+      <img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1933328504239270&ev=PageView&noscript=1" alt="" />
+    </noscript>
 
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

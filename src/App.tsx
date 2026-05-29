@@ -31,6 +31,7 @@ import { CustomerActivityTracker } from "./components/CustomerActivityTracker";
 import { CartOwnerSync } from "./components/CartOwnerSync";
 import Cart from "./pages/Cart";
 import { RouteSeoPolicy } from "./components/seo/RouteSeoPolicy";
+import { MetaPixelPageViewTracker } from "./components/MetaPixelPageViewTracker";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <RouteSeoPolicy />
+          <MetaPixelPageViewTracker />
           <ScrollToTop />
           <CartOwnerSync />
           <CustomerActivityTracker />
