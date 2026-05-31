@@ -532,7 +532,7 @@ export default function Checkout() {
                       </div>
                       <div>
                         <Label>Mobile number *</Label>
-                        <Input className="h-12" value={contact.phone} onChange={(e) => resetCustomerVerification({ ...contact, phone: e.target.value })} placeholder="7995862266" inputMode="tel" aria-invalid={contact.phone ? contactPhone.length < 10 : undefined} />
+                        <Input className="h-12" value={contact.phone} onChange={(e) => resetCustomerVerification({ ...contact, phone: e.target.value })} placeholder="7416644554" inputMode="tel" aria-invalid={contact.phone ? contactPhone.length < 10 : undefined} />
                       </div>
                     </div>
                     <div>

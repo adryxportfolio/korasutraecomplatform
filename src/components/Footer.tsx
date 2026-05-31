@@ -99,9 +99,9 @@ export function Footer() {
                 <Mail className="w-4 h-4" />
                 customer.support@korasutra.com
               </a>
-              <a href="tel:+917995862266" className="flex items-center gap-2 hover:text-foreground transition-colors">
+              <a href="tel:+917416644554" className="flex items-center gap-2 hover:text-foreground transition-colors">
                 <Phone className="w-4 h-4" />
-                +91 79958 62266
+                +91 74166 44554
               </a>
               <span className="flex items-center gap-2">
                 <MapPin className="w-4 h-4" />

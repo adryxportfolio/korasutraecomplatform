@@ -3,7 +3,7 @@ import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { Mail, Phone, MapPin, Clock, MessageCircle } from 'lucide-react';
 
-const WHATSAPP_NUMBER = '+917995862266';
+const WHATSAPP_NUMBER = '+917416644554';
 const WHATSAPP_MESSAGE = 'Hey!';
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`;
 
@@ -25,7 +25,7 @@ const contactSchema = {
   mainEntity: {
     "@type": "Organization",
     name: "Kora Sutra",
-    telephone: "+91-79958-62266",
+    telephone: "+91-74166-44554",
     email: "customer.support@korasutra.com",
     address: {
       "@type": "PostalAddress",
@@ -43,7 +43,7 @@ export default function Contact() {
         <title>Contact Korasutra | Get in Touch - Customer Support</title>
         <meta 
           name="description" 
-          content="Contact Kora Sutra for inquiries about handcrafted sarees. Reach us via phone +91 79958 62266, email customer.support@korasutra.com, or WhatsApp. We're here to help!" 
+          content="Contact Kora Sutra for inquiries about handcrafted sarees. Reach us via phone +91 74166 44554, email customer.support@korasutra.com, or WhatsApp. We're here to help!" 
         />
         <meta name="keywords" content="contact Kora Sutra, Kora Sutra phone number, Kora Sutra email, customer support, saree inquiries" />
         <link rel="canonical" href="https://korasutra.com/contact" />
@@ -77,8 +77,8 @@ export default function Contact() {
                   </div>
                   <div>
                     <h3 className="font-heading text-lg mb-1">Phone</h3>
-                    <a href="tel:+917995862266" className="text-muted-foreground font-body hover:text-foreground transition-colors">
-                      +91 79958 62266
+                    <a href="tel:+917416644554" className="text-muted-foreground font-body hover:text-foreground transition-colors">
+                      +91 74166 44554
                     </a>
                   </div>
                 </div>

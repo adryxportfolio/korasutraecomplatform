@@ -89,7 +89,7 @@ export default function Shipping() {
               <section className="mb-8">
                 <h2 className="text-2xl font-heading mb-4">Delivery Issues</h2>
                 <p className="text-muted-foreground mb-4">
-                  If you face any issues with delivery—such as delayed or damaged packages—please contact us immediately at customer.support@korasutra.com or +91 79958 62266. We will work with our courier partner to resolve the issue promptly.
+                  If you face any issues with delivery—such as delayed or damaged packages—please contact us immediately at customer.support@korasutra.com or +91 74166 44554. We will work with our courier partner to resolve the issue promptly.
                 </p>
               </section>
             </div>

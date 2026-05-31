@@ -48,7 +48,7 @@ export const SEO_CONFIG = {
   locale: "en_IN",
   twitterHandle: "@korasutra",
   supportEmail: "customer.support@korasutra.com",
-  supportPhone: "+91-79958-62266",
+  supportPhone: "+91-74166-44554",
   socialLinks: [
     "https://www.instagram.com/korasutraofficial/",
     "https://www.facebook.com/people/Korasutraofficial/61585129572992",

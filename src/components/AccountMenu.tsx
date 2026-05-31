@@ -354,7 +354,7 @@ export function AccountMenu() {
               </div>
               <div>
                 <Label>Mobile number</Label>
-                <Input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" placeholder="7995862266" />
+                <Input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" placeholder="7416644554" />
               </div>
             </div>
 

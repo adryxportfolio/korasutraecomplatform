@@ -64,7 +64,7 @@ describe("customer session storage", () => {
 
     setCustomerSessionProfile({
       countryCode: "+91",
-      phone: "7995862266",
+      phone: "7416644554",
       email: "customer@example.com",
       name: "Kora Customer",
     });
@@ -73,7 +73,7 @@ describe("customer session storage", () => {
     expect(window.localStorage.getItem(CUSTOMER_SESSION_PROFILE_KEY)).toBeNull();
     expect(getCustomerSessionProfile()).toEqual({
       countryCode: "+91",
-      phone: "7995862266",
+      phone: "7416644554",
       email: "customer@example.com",
       name: "Kora Customer",
     });

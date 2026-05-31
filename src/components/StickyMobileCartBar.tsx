@@ -19,7 +19,7 @@ export interface StickyMobileCartBarProps {
   sku?: string | null;
 }
 
-const WHATSAPP_NUMBER = '917995862266';
+const WHATSAPP_NUMBER = '917416644554';
 
 export function StickyMobileCartBar({ 
   price, 

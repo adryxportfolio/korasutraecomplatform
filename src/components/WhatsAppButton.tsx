@@ -1,7 +1,7 @@
 import { MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const WHATSAPP_NUMBER = '917995862266';
+const WHATSAPP_NUMBER = '917416644554';
 const WHATSAPP_MESSAGE = 'Hey';
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`;
 

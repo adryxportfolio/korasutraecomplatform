@@ -40,7 +40,7 @@ const organizationSchema = {
   contactPoint: [
     {
       "@type": "ContactPoint",
-      telephone: "+91-79958-62266",
+      telephone: "+91-74166-44554",
       contactType: "customer service",
       email: "customer.support@korasutra.com",
       availableLanguage: ["English", "Hindi"],
@@ -78,7 +78,7 @@ const localBusinessSchema = {
   name: "Korasutra",
   image: "https://korasutra.com/og-image.png",
   url: "https://korasutra.com",
-  telephone: "+91-79958-62266",
+  telephone: "+91-74166-44554",
   email: "customer.support@korasutra.com",
   address: {
     "@type": "PostalAddress",

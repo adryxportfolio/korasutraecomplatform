@@ -98,9 +98,9 @@ describe("admin analytics", () => {
 
   test("exports customer data with escaped CSV fields", () => {
     const csv = buildCustomerExportCsv([
-      { id: "c1", name: "Riya, Sen", phone: "7995862266", country_code: "+91", email: "", is_verified: true, updated_at: "2026-05-10T09:00:00.000Z" },
+      { id: "c1", name: "Riya, Sen", phone: "7416644554", country_code: "+91", email: "", is_verified: true, updated_at: "2026-05-10T09:00:00.000Z" },
     ]);
 
-    expect(csv).toContain('"Riya, Sen",+91 7995862266,,Yes,Just Visit');
+    expect(csv).toContain('"Riya, Sen",+91 7416644554,,Yes,Just Visit');
   });
 });

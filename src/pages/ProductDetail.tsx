@@ -605,7 +605,7 @@ export default function ProductDetail() {
     const variant = getCurrentVariant();
     const sku = formatSKU(variant?.sku);
     const message = `Hi, I'm interested in ${product?.title}.\n\nSKU: ${sku}\n\nCould you provide more details?`;
-    window.open(`https://wa.me/917995862266?text=${encodeURIComponent(message)}`, '_blank');
+    window.open(`https://wa.me/917416644554?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   if (loading) {
@@ -892,7 +892,7 @@ export default function ProductDetail() {
                           const variant = getCurrentVariant();
                           const sku = formatSKU(variant?.sku);
                           const message = `Hi, I'd like to be notified when this product is back in stock:\n\n*${product?.title}*\nSKU: ${sku}\n\nPlease notify me when it's available again.`;
-                          window.open(`https://wa.me/917995862266?text=${encodeURIComponent(message)}`, '_blank');
+                          window.open(`https://wa.me/917416644554?text=${encodeURIComponent(message)}`, '_blank');
                         }}
                         className="w-full h-11 md:h-12 text-sm md:text-base font-body uppercase tracking-widest bg-[#25D366] hover:bg-[#1da851] text-white rounded-full"
                       >

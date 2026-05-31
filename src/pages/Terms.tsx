@@ -106,7 +106,7 @@ export default function Terms() {
               <section className="mb-8">
                 <h2 className="text-2xl font-heading mb-4">9. Contact Us</h2>
                 <p className="text-muted-foreground mb-4">
-                  For questions about these Terms & Conditions, please contact us at customer.support@korasutra.com or call +91 79958 62266.
+                  For questions about these Terms & Conditions, please contact us at customer.support@korasutra.com or call +91 74166 44554.
                 </p>
               </section>
             </div>
