@@ -1,6 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
+import { WhatsAppButton } from '@/components/WhatsAppButton';
 import { Mail, Phone, MapPin, Clock, MessageCircle } from 'lucide-react';
 
 const WHATSAPP_NUMBER = '+917416644554';
@@ -187,6 +188,7 @@ export default function Contact() {
         </div>
       </main>
       <Footer />
+      <WhatsAppButton />
     </div>
     </>
   );
