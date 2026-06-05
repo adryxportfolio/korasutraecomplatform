@@ -19,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
 import { buildGa4CartPayload, trackGa4EcommerceEvent } from '@/lib/ga4Ecommerce';
-import { productMatchesCollectionQuery } from '@/lib/collectionProductFilters';
+import { productHasSareeBlousePiece, productMatchesCollectionQuery, productMatchesCollectionScope } from '@/lib/collectionProductFilters';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -226,31 +226,7 @@ export default function Collection() {
 
   // Check if product has blouse
   const hasBlouse = (product: ShopifyProduct): boolean => {
-    const text = `${product.node.title} ${product.node.description}`.toLowerCase();
-    const tags = product.node.tags?.map(t => t.toLowerCase()) || [];
-    
-    const withBlouseIndicators = ['with blouse', 'blouse included', 'includes blouse', 'blouse piece included', 'running blouse'];
-    const withoutBlouseIndicators = ['without blouse', 'no blouse', 'blouse not included', 'saree only'];
-    
-    for (const tag of tags) {
-      for (const indicator of withBlouseIndicators) {
-        if (tag.includes(indicator)) return true;
-      }
-      for (const indicator of withoutBlouseIndicators) {
-        if (tag.includes(indicator)) return false;
-      }
-    }
-    
-    for (const indicator of withBlouseIndicators) {
-      if (text.includes(indicator)) return true;
-    }
-    for (const indicator of withoutBlouseIndicators) {
-      if (text.includes(indicator)) return false;
-    }
-    
-    if (text.includes('blouse') && !text.includes('without blouse')) return true;
-    
-    return false;
+    return productHasSareeBlousePiece(product.node);
   };
 
   // Check if product title contains the selected color
@@ -270,11 +246,14 @@ export default function Collection() {
     async function loadProducts() {
       setLoading(true);
       const data = await fetchProducts(100, config?.query || searchQuery || undefined);
+      const scopedData = slug && !searchQuery
+        ? data.filter(product => productMatchesCollectionScope(product.node, slug))
+        : data;
       
       // Filter products by title to ensure they actually contain the fabric/collection keyword
-      let filteredData = data;
+      let filteredData = scopedData;
       if (config?.query && slug) {
-        filteredData = data.filter(product => productMatchesCollectionQuery(product.node, config.query || ""));
+        filteredData = scopedData.filter(product => productMatchesCollectionQuery(product.node, config.query || ""));
       }
       
       // Track unavailable filters from URL params
@@ -293,7 +272,7 @@ export default function Collection() {
         // Check which fabrics have matching products
         const fabricsWithMatches: string[] = [];
         fabrics.forEach(fabric => {
-          const hasMatch = data.some(product => productMatchesCollectionQuery(product.node, fabric));
+          const hasMatch = filteredData.some(product => productMatchesCollectionQuery(product.node, fabric));
           if (hasMatch) {
             fabricsWithMatches.push(fabric);
           } else {
@@ -304,7 +283,7 @@ export default function Collection() {
         // Check which patterns have matching products
         const patternsWithMatches: string[] = [];
         patterns.forEach(pattern => {
-          const hasMatch = data.some(product => productMatchesCollectionQuery(product.node, pattern));
+          const hasMatch = filteredData.some(product => productMatchesCollectionQuery(product.node, pattern));
           if (hasMatch) {
             patternsWithMatches.push(pattern);
           } else {
@@ -317,7 +296,7 @@ export default function Collection() {
         occasions.forEach(occasion => {
           const occasionKeywords = occasion.match(/\(([^)]+)\)/);
           const keyword = occasionKeywords ? occasionKeywords[1].toLowerCase() : occasion;
-          const hasMatch = data.some(product => productMatchesCollectionQuery(product.node, keyword));
+          const hasMatch = filteredData.some(product => productMatchesCollectionQuery(product.node, keyword));
           if (hasMatch) {
             occasionsWithMatches.push(occasion);
           } else {
@@ -326,7 +305,7 @@ export default function Collection() {
         });
         
         // Filter using only the filters that have matches
-        filteredData = data.filter(product => {
+        filteredData = filteredData.filter(product => {
           // Check if product matches any available fabric (only if we have fabrics with matches)
           const matchesFabric = fabricsWithMatches.length === 0 || fabricsWithMatches.some(fabric => productMatchesCollectionQuery(product.node, fabric));
           

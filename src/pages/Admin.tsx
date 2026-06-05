@@ -4,9 +4,12 @@ import {
   BarChart3,
   Boxes,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Edit3,
   FileText,
+  GripVertical,
   Image as ImageIcon,
   IndianRupee,
   LayoutDashboard,
@@ -73,7 +76,14 @@ import {
 } from "@/lib/siteSettings";
 import { buildEditableJournalRows } from "@/lib/journalAdminRows";
 import { buildAddToCartUrl } from "@/lib/addToCartUrl";
-import { buildAdminProductImages, findNonCloudinaryMediaUrls, findShopifyCdnMediaUrls, type AdminProductImageInput } from "@/lib/adminProductImages";
+import {
+  buildAdminProductImages,
+  findNonCloudinaryMediaUrls,
+  findShopifyCdnMediaUrls,
+  moveAdminProductImage,
+  removeAdminProductImage,
+  type AdminProductImageInput,
+} from "@/lib/adminProductImages";
 import { validateCompareAtPrice } from "@/lib/productPricing";
 import { buildProductExportCsv, buildProductFeedXml } from "@/lib/productFeeds";
 import { blousePieceDisplayText } from "@/lib/productPresentation";
@@ -84,6 +94,9 @@ const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_F
 
 type AdminSection = "dashboard" | "products" | "inventory" | "orders" | "reviews" | "customers" | "coupons" | "sales" | "journals" | "seo" | "settings";
 type PendingProductImageUpload = { dataUrl: string; fileName: string; contentType: string };
+type ProductImageFormItem =
+  | { id: string; kind: "stored"; url: string }
+  | { id: string; kind: "upload"; dataUrl: string; fileName: string; contentType: string };
 
 const navItems: Array<{ id: AdminSection; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -134,6 +147,28 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function storedImageUrlsFromItems(items: ProductImageFormItem[]) {
+  return items
+    .filter((item): item is Extract<ProductImageFormItem, { kind: "stored" }> => item.kind === "stored")
+    .map((item) => item.url)
+    .join("\n");
+}
+
+function uploadsFromImageItems(items: ProductImageFormItem[]): PendingProductImageUpload[] {
+  return items
+    .filter((item): item is Extract<ProductImageFormItem, { kind: "upload" }> => item.kind === "upload")
+    .map(({ dataUrl, fileName, contentType }) => ({ dataUrl, fileName, contentType }));
+}
+
+function productImageItemPreview(item: ProductImageFormItem) {
+  return item.kind === "upload" ? item.dataUrl : item.url;
+}
+
+function imageItemId(prefix: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return `${prefix}-${crypto.randomUUID()}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export default function Admin() {
   const [adminToken, setAdminToken] = useState<string | null>(() => {
     const storedToken = localStorage.getItem("ks_admin_token");
@@ -160,6 +195,7 @@ export default function Admin() {
   const [reviewReplies, setReviewReplies] = useState<Record<string, string>>({});
   const [isImporting, setIsImporting] = useState(false);
   const [productXmlFeedUrl, setProductXmlFeedUrl] = useState("");
+  const [draggedProductImageIndex, setDraggedProductImageIndex] = useState<number | null>(null);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [salesRange, setSalesRange] = useState({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
@@ -186,6 +222,7 @@ export default function Admin() {
     imageFileName: "",
     imageContentType: "",
     imageUploads: [] as PendingProductImageUpload[],
+    imageItems: [] as ProductImageFormItem[],
     videoUrl: "",
     videoDataUrl: "",
     videoFileName: "",
@@ -246,7 +283,7 @@ export default function Admin() {
     publishedAt: "",
   });
 
-  const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", imageUploads: [], videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", seoTitle: "", seoDescription: "", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
+  const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", imageUploads: [], imageItems: [], videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", seoTitle: "", seoDescription: "", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
   const resetCouponForm = () => setCouponForm({ id: "", code: "", description: "", status: "active", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscountCap: "", usageLimitTotal: "", usageLimitPerCustomer: "", firstOrderOnly: false, startAt: "", endAt: "", neverExpires: false, appliesTo: "all", includedProductIds: "", includedCategorySlugs: "", includedTags: "", excludedProductIds: "", excludedCategorySlugs: "", excludeSaleItems: false, canCombineWithCoupons: false, canCombineWithSalePrices: true, autoApply: false, displayOnWebsite: false, priority: "0", buyQuantity: "", getQuantity: "" });
   const resetJournalForm = () => setJournalForm({ id: "", title: "", slug: "", excerpt: "", content: "", imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", category: "Journal", author: "Kora Sutra", readTime: "3 min read", keywords: "", seoTitle: "", seoDescription: "", status: "draft", publishedAt: "" });
   const isLocalAdmin = canUseLocalAdminMode(adminToken, LOCAL_ADMIN_FALLBACK_ENABLED);
@@ -486,10 +523,37 @@ export default function Admin() {
     { slug: "sarees", name: "Sarees" },
     { slug: "blouses", name: "Blouses" },
   ];
-  const productImagePreviews = [
-    ...productForm.imageUrl.split(/\r?\n/).map((url) => url.trim()).filter(Boolean),
-    ...productForm.imageUploads.map((image) => image.dataUrl),
-  ].slice(0, 12);
+  const productImageItems = productForm.imageItems.slice(0, 12);
+
+  const setProductImageItems = (items: ProductImageFormItem[]) => {
+    const nextItems = items.slice(0, 12);
+    setProductForm((current) => ({
+      ...current,
+      imageItems: nextItems,
+      imageUrl: storedImageUrlsFromItems(nextItems),
+      imageUploads: uploadsFromImageItems(nextItems),
+    }));
+  };
+
+  const updateStoredImageUrls = (value: string) => {
+    const storedItems: ProductImageFormItem[] = value
+      .split(/\r?\n/)
+      .map((url) => url.trim())
+      .filter(Boolean)
+      .map((url) => ({ id: imageItemId("stored"), kind: "stored", url }));
+    setProductImageItems([
+      ...storedItems,
+      ...productForm.imageItems.filter((item) => item.kind === "upload"),
+    ]);
+  };
+
+  const moveProductImageItem = (fromIndex: number, toIndex: number) => {
+    setProductImageItems(moveAdminProductImage(productForm.imageItems, fromIndex, toIndex));
+  };
+
+  const removeProductImageItem = (index: number) => {
+    setProductImageItems(removeAdminProductImage(productForm.imageItems, index));
+  };
 
   const toggleCatalogSelection = (group: CatalogTaxonomyGroup, slug: string) => {
     const current = productForm.catalogSelection[group];
@@ -528,17 +592,23 @@ export default function Admin() {
     return { url: result.url, path: result.path || "", contentType: result.contentType || (media === "image" ? productForm.imageContentType : productForm.videoContentType) };
   };
 
-  const uploadProductImages = async (): Promise<AdminProductImageInput[]> => {
-    if (!productForm.imageUploads.length) return [];
+  const uploadProductImageItem = async (image: ProductImageFormItem): Promise<AdminProductImageInput | null> => {
+    if (image.kind === "stored") {
+      return {
+        url: image.url,
+        altText: productForm.title,
+      };
+    }
+
     if (isLocalAdmin) {
-      return productForm.imageUploads.map((image) => ({
+      return {
         url: image.dataUrl,
         altText: productForm.title,
-      }));
+      };
     }
+
     if (!adminToken) throw new Error("Missing admin token");
 
-    return Promise.all(productForm.imageUploads.map(async (image) => {
       const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-upload-image`, {
         method: "POST",
         headers: {
@@ -559,7 +629,11 @@ export default function Admin() {
         altText: productForm.title,
         storageKey: result.path || "",
       };
-    }));
+  };
+
+  const uploadProductImages = async (): Promise<AdminProductImageInput[]> => {
+    const uploadedImages = await Promise.all(productForm.imageItems.map(uploadProductImageItem));
+    return uploadedImages.filter(Boolean) as AdminProductImageInput[];
   };
 
   const saveProduct = async (event: React.FormEvent) => {
@@ -568,12 +642,11 @@ export default function Admin() {
       const compareAtError = validateCompareAtPrice(productForm.price, productForm.compareAtPrice);
       if (compareAtError) throw new Error(compareAtError);
 
-      const uploadedImages = await uploadProductImages();
+      const orderedImages = await uploadProductImages();
       const uploadedVideo = await uploadProductMedia("video");
       const productImages = buildAdminProductImages({
         title: productForm.title,
-        imageUrls: productForm.imageUrl,
-        uploadedImages,
+        orderedImages,
       });
       const shopifyMediaUrls = findShopifyCdnMediaUrls({
         images: productImages,
@@ -620,11 +693,12 @@ export default function Admin() {
 
   const editProduct = (product: any) => {
     const firstVariant = product.product_variants?.[0];
-    const imageUrls = [...(product.product_images || [])]
+    const storedImageItems: ProductImageFormItem[] = [...(product.product_images || [])]
       .sort((a: any, b: any) => a.position - b.position)
       .map((image: any) => image.url)
       .filter(Boolean)
-      .join("\n");
+      .map((url: string) => ({ id: imageItemId("stored"), kind: "stored", url }));
+    const imageUrls = storedImageUrlsFromItems(storedImageItems);
     const firstVideo = [...(product.product_videos || [])].sort((a: any, b: any) => a.position - b.position)[0];
     setProductForm({
       title: product.title || "",
@@ -644,6 +718,7 @@ export default function Admin() {
       imageFileName: "",
       imageContentType: "",
       imageUploads: [],
+      imageItems: storedImageItems,
       videoUrl: firstVideo?.url || "",
       videoDataUrl: "",
       videoFileName: "",
@@ -696,9 +771,11 @@ export default function Admin() {
     const imageFiles = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
     if (!imageFiles.length) return;
 
-    Promise.all(imageFiles.map((file) => new Promise<PendingProductImageUpload>((resolve, reject) => {
+    Promise.all(imageFiles.map((file) => new Promise<ProductImageFormItem>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve({
+        id: imageItemId("upload"),
+        kind: "upload",
         dataUrl: String(reader.result || ""),
         fileName: file.name,
         contentType: file.type || "image/jpeg",
@@ -708,7 +785,9 @@ export default function Admin() {
     }))).then((images) => {
       setProductForm((current) => ({
         ...current,
-        imageUploads: [...current.imageUploads, ...images].slice(0, 12),
+        imageItems: [...current.imageItems, ...images].slice(0, 12),
+        imageUrl: storedImageUrlsFromItems([...current.imageItems, ...images].slice(0, 12)),
+        imageUploads: uploadsFromImageItems([...current.imageItems, ...images].slice(0, 12)),
       }));
     }).catch((error) => {
       toast.error("Unable to read image files", { description: error instanceof Error ? error.message : undefined });
@@ -1378,25 +1457,99 @@ export default function Admin() {
                     <Field label="SKU"><Input value={productForm.sku} onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} /></Field>
                     <Field label="Inventory Qty"><Input value={productForm.inventoryQty} onChange={(e) => setProductForm({ ...productForm, inventoryQty: e.target.value })} type="number" /></Field>
                     <Field label="Product photos"><Input type="file" accept="image/*" multiple onChange={(e) => selectProductImageFiles(e.target.files)} /></Field>
-                    <Field label="Stored image URLs"><Textarea value={productForm.imageUrl} onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })} placeholder="One image URL per line" rows={3} /></Field>
+                    <Field label="Stored image URLs"><Textarea value={productForm.imageUrl} onChange={(e) => updateStoredImageUrls(e.target.value)} placeholder="One image URL per line" rows={3} /></Field>
                     <Field label="Product video"><Input type="file" accept="video/*" onChange={(e) => selectMediaFile(e.target.files?.[0] || null, "video")} /></Field>
                     <Field label="Stored video URL"><Input value={productForm.videoUrl} onChange={(e) => setProductForm({ ...productForm, videoUrl: e.target.value })} placeholder="Auto-filled after upload" /></Field>
-                    {productImagePreviews.length > 0 && (
+                    {productImageItems.length > 0 && (
                       <div className="md:col-span-2 border border-border rounded-sm p-3 space-y-3">
                         <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs text-muted-foreground font-body">{productImagePreviews.length} photo{productImagePreviews.length !== 1 ? "s" : ""} linked to the product gallery.</p>
-                          {productForm.imageUploads.length > 0 && (
-                            <Button type="button" size="sm" variant="outline" onClick={() => setProductForm({ ...productForm, imageUploads: [] })}>
+                          <p className="text-xs text-muted-foreground font-body">{productImageItems.length} photo{productImageItems.length !== 1 ? "s" : ""} in gallery order.</p>
+                          {productImageItems.some((item) => item.kind === "upload") && (
+                            <Button type="button" size="sm" variant="outline" onClick={() => setProductImageItems(productForm.imageItems.filter((item) => item.kind === "stored"))}>
                               Clear selected uploads
                             </Button>
                           )}
                         </div>
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                          {productImagePreviews.map((src, index) => (
-                            <div key={`${src}-${index}`} className="aspect-[3/4] bg-secondary/30 rounded-sm overflow-hidden">
+                          {productImageItems.map((item, index) => {
+                            const src = productImageItemPreview(item);
+                            return (
+                            <div
+                              key={item.id}
+                              className={`group relative aspect-[3/4] bg-secondary/30 rounded-sm overflow-hidden border border-border ${draggedProductImageIndex === index ? "opacity-60 ring-2 ring-primary" : ""}`}
+                              draggable={productImageItems.length > 1}
+                              onDragStart={(event) => {
+                                setDraggedProductImageIndex(index);
+                                event.dataTransfer.effectAllowed = "move";
+                              }}
+                              onDragOver={(event) => {
+                                event.preventDefault();
+                                event.dataTransfer.dropEffect = "move";
+                              }}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                if (draggedProductImageIndex !== null) moveProductImageItem(draggedProductImageIndex, index);
+                                setDraggedProductImageIndex(null);
+                              }}
+                              onDragEnd={() => setDraggedProductImageIndex(null)}
+                            >
                               <img src={src} alt={`${productForm.title || "Product"} preview ${index + 1}`} className="w-full h-full object-cover" />
+                              <div className="absolute left-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm">
+                                <GripVertical className="w-4 h-4" aria-hidden="true" />
+                                <span className="sr-only">Drag photo {index + 1}</span>
+                              </div>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="absolute right-1 top-1 h-7 w-7 rounded-full bg-background/90 p-0 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  removeProductImageItem(index);
+                                }}
+                                aria-label={`Remove photo ${index + 1}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                              <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-7 w-7 rounded-full bg-background/90 p-0"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    moveProductImageItem(index, index - 1);
+                                  }}
+                                  disabled={index === 0}
+                                  aria-label={`Move photo ${index + 1} earlier`}
+                                >
+                                  <ChevronLeft className="w-3.5 h-3.5" />
+                                </Button>
+                                <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-background/90 px-2 text-[11px] font-body text-foreground shadow-sm">
+                                  {index + 1}
+                                </span>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-7 w-7 rounded-full bg-background/90 p-0"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    moveProductImageItem(index, index + 1);
+                                  }}
+                                  disabled={index === productImageItems.length - 1}
+                                  aria-label={`Move photo ${index + 1} later`}
+                                >
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}

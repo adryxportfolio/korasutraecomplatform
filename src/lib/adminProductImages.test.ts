@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { buildAdminProductImages, findNonCloudinaryMediaUrls, findShopifyCdnMediaUrls } from "./adminProductImages";
+import {
+  buildAdminProductImages,
+  findNonCloudinaryMediaUrls,
+  findShopifyCdnMediaUrls,
+  moveAdminProductImage,
+  removeAdminProductImage,
+} from "./adminProductImages";
 
 describe("admin product images", () => {
   test("builds an ordered multi-image gallery from stored URLs and uploaded files", () => {
@@ -23,6 +29,41 @@ describe("admin product images", () => {
       uploadedImages: [{ url: "" }, { url: "https://cdn.example.com/front.jpg" }],
     })).toEqual([
       { url: "https://cdn.example.com/front.jpg", altText: "Kantha Saree" },
+    ]);
+  });
+
+  test("keeps the explicit admin gallery order when stored and uploaded images are mixed", () => {
+    expect(buildAdminProductImages({
+      title: "Ordered Blouse",
+      orderedImages: [
+        { url: "https://cdn.example.com/uploaded-detail.jpg" },
+        { url: "https://cdn.example.com/stored-front.jpg" },
+        { url: "https://cdn.example.com/uploaded-back.jpg", altText: "Back view" },
+      ],
+      imageUrls: "https://cdn.example.com/stored-front.jpg",
+      uploadedImages: [
+        { url: "https://cdn.example.com/uploaded-detail.jpg" },
+        { url: "https://cdn.example.com/uploaded-back.jpg", altText: "Back view" },
+      ],
+    })).toEqual([
+      { url: "https://cdn.example.com/uploaded-detail.jpg", altText: "Ordered Blouse" },
+      { url: "https://cdn.example.com/stored-front.jpg", altText: "Ordered Blouse" },
+      { url: "https://cdn.example.com/uploaded-back.jpg", altText: "Back view" },
+    ]);
+  });
+
+  test("moves a product image to a new position", () => {
+    expect(moveAdminProductImage(["front", "detail", "back"], 2, 0)).toEqual([
+      "back",
+      "front",
+      "detail",
+    ]);
+  });
+
+  test("removes a product image from the editable gallery", () => {
+    expect(removeAdminProductImage(["front", "detail", "back"], 1)).toEqual([
+      "front",
+      "back",
     ]);
   });
 
