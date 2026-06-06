@@ -668,6 +668,11 @@ export default function Checkout() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-heading text-sm truncate">{item.product.node.title}</p>
+                          {item.selectedOptions.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              {item.selectedOptions.map((option) => `${option.name}: ${option.value}`).join(" / ")}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground">Qty {item.quantity}</p>
                           <p className="text-sm font-price mt-1">{formatPrice(item.price.amount, item.price.currencyCode)}</p>
                         </div>

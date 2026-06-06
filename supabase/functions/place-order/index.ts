@@ -171,7 +171,12 @@ async function sendOrderEmailsWithResults(order: any, orderItems: any[]) {
   }
 
   const lineItems = orderItems
-    .map((item) => `<li>${Number(item.quantity)}x ${escapeHtml(item.product_title)} (${escapeHtml(item.sku || "no SKU")}) - INR ${Number(item.line_total).toFixed(2)}</li>`)
+    .map((item) => {
+      const variant = item.variant_title && item.variant_title !== "Default"
+        ? ` - ${escapeHtml(item.variant_title)}`
+        : "";
+      return `<li>${Number(item.quantity)}x ${escapeHtml(item.product_title)}${variant} (${escapeHtml(item.sku || "no SKU")}) - INR ${Number(item.line_total).toFixed(2)}</li>`;
+    })
     .join("");
 
   const admin = await sendEmail({

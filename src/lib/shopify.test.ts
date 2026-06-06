@@ -94,3 +94,71 @@ describe("shopify catalog pricing", () => {
     });
   });
 });
+
+describe("shopify blouse size options", () => {
+  test("maps independently stocked blouse variants into an ordered Size option", () => {
+    const item = mapCatalogProduct({
+      id: "product-blouse",
+      title: "Silk Blouse",
+      description: "",
+      handle: "silk-blouse",
+      tags: [],
+      price: 2499,
+      compare_at_price: null,
+      fabric: "silk",
+      technique: null,
+      color: "red",
+      has_blouse_piece: false,
+      category: { slug: "blouses", name: "Blouses" },
+      product_images: [{ url: "https://res.cloudinary.com/demo/image/upload/blouse.jpg", alt_text: null, position: 0 }],
+      product_variants: [
+        {
+          id: "variant-38",
+          sku: "KS-BLOUSE-38",
+          title: "Size 38",
+          option1_name: "Size",
+          option1_value: "38",
+          option2_name: null,
+          option2_value: null,
+          price: 2499,
+          compare_at_price: null,
+          inventory_qty: 5,
+          track_inventory: true,
+          position: 1,
+        },
+        {
+          id: "variant-34",
+          sku: "KS-BLOUSE-34",
+          title: "Size 34",
+          option1_name: "Size",
+          option1_value: "34",
+          option2_name: null,
+          option2_value: null,
+          price: 2499,
+          compare_at_price: null,
+          inventory_qty: 2,
+          track_inventory: true,
+          position: 0,
+        },
+      ],
+    });
+
+    expect(item.node.options).toEqual([{ name: "Size", values: ["34", "38"] }]);
+    expect(item.node.variants.edges.map(({ node }) => ({
+      title: node.title,
+      quantityAvailable: node.quantityAvailable,
+      selectedOptions: node.selectedOptions,
+    }))).toEqual([
+      {
+        title: "Size 34",
+        quantityAvailable: 2,
+        selectedOptions: [{ name: "Size", value: "34" }],
+      },
+      {
+        title: "Size 38",
+        quantityAvailable: 5,
+        selectedOptions: [{ name: "Size", value: "38" }],
+      },
+    ]);
+  });
+});

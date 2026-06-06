@@ -120,7 +120,10 @@ async function sendOrderUpdateEmail(order: any) {
     : "";
 
   const itemsHtml = (order.order_items || [])
-    .map((item: any) => `<li>${item.quantity}x ${item.product_title} - INR ${item.line_total}</li>`)
+    .map((item: any) => {
+      const variant = item.variant_title && item.variant_title !== "Default" ? ` - ${item.variant_title}` : "";
+      return `<li>${item.quantity}x ${item.product_title}${variant} - INR ${item.line_total}</li>`;
+    })
     .join("");
 
   const response = await fetch("https://api.resend.com/emails", {

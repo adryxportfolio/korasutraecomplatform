@@ -71,6 +71,9 @@ export default function ThankYou() {
                       </div>
                       <div className="flex-1">
                         <p className="font-heading text-sm">{item.product_title}</p>
+                        {item.variant_title && item.variant_title !== "Default" && (
+                          <p className="text-xs font-medium">{item.variant_title}</p>
+                        )}
                         <p className="text-xs text-muted-foreground">Qty {item.quantity}</p>
                       </div>
                       <p className="font-price text-sm">{formatPrice(String(item.line_total), "INR")}</p>

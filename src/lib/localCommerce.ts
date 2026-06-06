@@ -105,7 +105,7 @@ function productToAdminRow(product: AdminImportProduct & { videos?: any[] }, ind
       option2_value: variant.option2Value,
       price: variant.price || product.price,
       compare_at_price: variant.compareAtPrice,
-      inventory_qty: Math.max(variant.inventoryQty, 1),
+      inventory_qty: Math.max(variant.inventoryQty, 0),
       track_inventory: variant.trackInventory,
       position: variant.position ?? variantIndex,
       product: { title: product.title, handle: product.handle },
@@ -241,7 +241,7 @@ function normalizeStoredProducts(products: any[]) {
     status: product.status === "archived" ? "archived" : "active",
     product_variants: (product.product_variants || []).map((variant: any) => ({
       ...variant,
-      inventory_qty: Math.max(Number(variant.inventory_qty || 0), 1),
+      inventory_qty: Math.max(Number(variant.inventory_qty || 0), 0),
     })),
   }));
 }

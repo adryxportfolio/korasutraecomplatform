@@ -88,6 +88,10 @@ import { validateCompareAtPrice } from "@/lib/productPricing";
 import { buildProductExportCsv, buildProductFeedXml } from "@/lib/productFeeds";
 import { blousePieceDisplayText } from "@/lib/productPresentation";
 import { seoAuditEvents, seoPractices } from "@/lib/seoPractices";
+import {
+  buildAdminProductVariants,
+  createBlouseSizeRows,
+} from "@/lib/blouseVariants";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
@@ -229,6 +233,7 @@ export default function Admin() {
     videoContentType: "",
     sku: "",
     inventoryQty: "1",
+    blouseSizeRows: createBlouseSizeRows(),
     seoTitle: "",
     seoDescription: "",
     catalogSelection: { fabric: [] as string[], pattern: [] as string[], occasion: [] as string[] },
@@ -283,7 +288,7 @@ export default function Admin() {
     publishedAt: "",
   });
 
-  const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", imageUploads: [], imageItems: [], videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", seoTitle: "", seoDescription: "", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
+  const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", imageUploads: [], imageItems: [], videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", blouseSizeRows: createBlouseSizeRows(), seoTitle: "", seoDescription: "", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
   const resetCouponForm = () => setCouponForm({ id: "", code: "", description: "", status: "active", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscountCap: "", usageLimitTotal: "", usageLimitPerCustomer: "", firstOrderOnly: false, startAt: "", endAt: "", neverExpires: false, appliesTo: "all", includedProductIds: "", includedCategorySlugs: "", includedTags: "", excludedProductIds: "", excludedCategorySlugs: "", excludeSaleItems: false, canCombineWithCoupons: false, canCombineWithSalePrices: true, autoApply: false, displayOnWebsite: false, priority: "0", buyQuantity: "", getQuantity: "" });
   const resetJournalForm = () => setJournalForm({ id: "", title: "", slug: "", excerpt: "", content: "", imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", category: "Journal", author: "Kora Sutra", readTime: "3 min read", keywords: "", seoTitle: "", seoDescription: "", status: "draft", publishedAt: "" });
   const isLocalAdmin = canUseLocalAdminMode(adminToken, LOCAL_ADMIN_FALLBACK_ENABLED);
@@ -641,6 +646,16 @@ export default function Admin() {
     try {
       const compareAtError = validateCompareAtPrice(productForm.price, productForm.compareAtPrice);
       if (compareAtError) throw new Error(compareAtError);
+      const productHandle = productForm.handle || slugify(productForm.title);
+      const variants = buildAdminProductVariants({
+        categorySlug: productForm.categorySlug,
+        handle: productHandle,
+        sku: productForm.sku,
+        inventoryQty: productForm.inventoryQty,
+        price: productForm.price,
+        compareAtPrice: productForm.compareAtPrice,
+        blouseSizeRows: productForm.blouseSizeRows,
+      });
 
       const orderedImages = await uploadProductImages();
       const uploadedVideo = await uploadProductMedia("video");
@@ -666,18 +681,11 @@ export default function Admin() {
           action: "upsert-product",
           product: {
             ...productForm,
-            handle: productForm.handle || slugify(productForm.title),
+            handle: productHandle,
             tags: catalogTags,
             images: productImages,
             videos: uploadedVideo.url ? [{ url: uploadedVideo.url, altText: `${productForm.title} video`, contentType: uploadedVideo.contentType, storageKey: uploadedVideo.path }] : [],
-            variant: {
-              sku: productForm.sku || `KS-${Date.now()}`,
-              title: "Default",
-              price: Number(productForm.price || 0),
-              compareAtPrice: productForm.compareAtPrice ? Number(productForm.compareAtPrice) : null,
-              inventoryQty: Number(productForm.inventoryQty || 0),
-              trackInventory: true,
-            },
+            variants,
           },
         },
       });
@@ -725,6 +733,7 @@ export default function Admin() {
       videoContentType: firstVideo?.content_type || "",
       sku: firstVariant?.sku || "",
       inventoryQty: String(firstVariant?.inventory_qty ?? 1),
+      blouseSizeRows: createBlouseSizeRows(product.product_variants || []),
       seoTitle: product.seo_title || "",
       seoDescription: product.seo_description || "",
       catalogSelection: selectionFromTags(product.tags || []),
@@ -1454,8 +1463,57 @@ export default function Admin() {
                     <Field label="Fabric"><Input value={productForm.fabric} onChange={(e) => setProductForm({ ...productForm, fabric: e.target.value })} /></Field>
                     <Field label="Technique"><Input value={productForm.technique} onChange={(e) => setProductForm({ ...productForm, technique: e.target.value })} /></Field>
                     <Field label="Color"><Input value={productForm.color} onChange={(e) => setProductForm({ ...productForm, color: e.target.value })} /></Field>
-                    <Field label="SKU"><Input value={productForm.sku} onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} /></Field>
-                    <Field label="Inventory Qty"><Input value={productForm.inventoryQty} onChange={(e) => setProductForm({ ...productForm, inventoryQty: e.target.value })} type="number" /></Field>
+                    {productForm.categorySlug === "blouses" ? (
+                      <div className="md:col-span-2 space-y-3 border border-border rounded-sm p-4">
+                        <div>
+                          <p className="text-sm font-medium font-body">Blouse size variants</p>
+                          <p className="text-xs text-muted-foreground">Enable the available sizes and set inventory for each one. Blank SKUs are generated automatically.</p>
+                        </div>
+                        <div className="space-y-2">
+                          {productForm.blouseSizeRows.map((row) => (
+                            <div key={row.size} className="grid grid-cols-1 sm:grid-cols-[72px_1fr_110px] gap-3 items-center rounded-sm border border-border p-3">
+                              <label className="flex items-center gap-2 text-sm font-body">
+                                <Switch
+                                  checked={row.enabled}
+                                  onCheckedChange={(enabled) => setProductForm((current) => ({
+                                    ...current,
+                                    blouseSizeRows: current.blouseSizeRows.map((item) => item.size === row.size ? { ...item, enabled } : item),
+                                  }))}
+                                />
+                                {row.size}
+                              </label>
+                              <Input
+                                value={row.sku}
+                                disabled={!row.enabled}
+                                aria-label={`SKU for blouse size ${row.size}`}
+                                placeholder={`Auto SKU for size ${row.size}`}
+                                onChange={(event) => setProductForm((current) => ({
+                                  ...current,
+                                  blouseSizeRows: current.blouseSizeRows.map((item) => item.size === row.size ? { ...item, sku: event.target.value } : item),
+                                }))}
+                              />
+                              <Input
+                                value={row.inventoryQty}
+                                disabled={!row.enabled}
+                                aria-label={`Inventory for blouse size ${row.size}`}
+                                type="number"
+                                min="0"
+                                step="1"
+                                onChange={(event) => setProductForm((current) => ({
+                                  ...current,
+                                  blouseSizeRows: current.blouseSizeRows.map((item) => item.size === row.size ? { ...item, inventoryQty: event.target.value } : item),
+                                }))}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <Field label="SKU"><Input value={productForm.sku} onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} /></Field>
+                        <Field label="Inventory Qty"><Input value={productForm.inventoryQty} onChange={(e) => setProductForm({ ...productForm, inventoryQty: e.target.value })} type="number" min="0" step="1" /></Field>
+                      </>
+                    )}
                     <Field label="Product photos"><Input type="file" accept="image/*" multiple onChange={(e) => selectProductImageFiles(e.target.files)} /></Field>
                     <Field label="Stored image URLs"><Textarea value={productForm.imageUrl} onChange={(e) => updateStoredImageUrls(e.target.value)} placeholder="One image URL per line" rows={3} /></Field>
                     <Field label="Product video"><Input type="file" accept="video/*" onChange={(e) => selectMediaFile(e.target.files?.[0] || null, "video")} /></Field>
@@ -1623,12 +1681,13 @@ export default function Admin() {
             <Panel title="Inventory">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead><tr className="text-left border-b border-border"><th className="py-2">SKU</th><th>Product</th><th>Qty</th><th>Flag</th><th>Adjust</th></tr></thead>
+                  <thead><tr className="text-left border-b border-border"><th className="py-2">SKU</th><th>Product</th><th>Variant</th><th>Qty</th><th>Flag</th><th>Adjust</th></tr></thead>
                   <tbody>
                     {data.inventory.map((variant: any) => (
                       <tr key={variant.id} className="border-b border-border last:border-0">
                         <td className="py-3 font-mono">{variant.sku}</td>
                         <td>{variant.product?.title}</td>
+                        <td>{variant.option1_name === "Size" && variant.option1_value ? `Size ${variant.option1_value}` : variant.title || "Default"}</td>
                         <td>{variant.inventory_qty}</td>
                         <td>{Number(variant.inventory_qty) <= 2 ? <Badge className="bg-red-100 text-red-800 border-red-200">Low Stock</Badge> : <Badge variant="outline">OK</Badge>}</td>
                         <td className="flex gap-2 py-2"><Button size="sm" variant="outline" onClick={() => adjustInventory(variant.id, -1)}>-1</Button><Button size="sm" variant="outline" onClick={() => adjustInventory(variant.id, 1)}>+1</Button></td>
@@ -1657,7 +1716,13 @@ export default function Admin() {
                     {expandedOrder === order.id && (
                       <div className="border-t border-border p-4 grid lg:grid-cols-[1fr_320px] gap-5">
                         <div className="space-y-3">
-                          {(order.order_items || []).map((item: any) => <p key={item.id} className="text-sm">{item.quantity}x {item.product_title} <span className="text-muted-foreground">({item.sku})</span></p>)}
+                          {(order.order_items || []).map((item: any) => (
+                            <p key={item.id} className="text-sm">
+                              {item.quantity}x {item.product_title}
+                              {item.variant_title && item.variant_title !== "Default" ? <span className="font-medium"> - {item.variant_title}</span> : null}
+                              <span className="text-muted-foreground"> ({item.sku})</span>
+                            </p>
+                          ))}
                           <div className="grid sm:grid-cols-2 gap-3 text-sm border-t border-border pt-3">
                             <div>
                               <p className="text-xs uppercase tracking-wide text-muted-foreground">Customer</p>
