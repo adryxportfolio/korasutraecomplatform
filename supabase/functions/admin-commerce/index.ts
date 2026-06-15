@@ -184,6 +184,55 @@ async function saveProduct(supabase: any, product: any) {
   const productPrice = Number(product.price || 0);
   const productCompareAtPrice = optionalMoney(product.compareAtPrice);
   validateCompareAtPrice(productPrice, productCompareAtPrice);
+  const variants = Array.isArray(product.variants)
+    ? product.variants
+    : product.variant
+      ? [product.variant]
+      : [];
+  if (!variants.length) throw new Error("At least one product variant is required");
+
+  const seenSkus = new Set<string>();
+  const normalizedVariants = variants.map((variant: any, index: number) => {
+    const sku = String(variant.sku || `${product.handle}-${variant.title || "default"}`)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    if (!sku) throw new Error(`Variant ${index + 1} needs a SKU`);
+    if (seenSkus.has(sku)) throw new Error(`Duplicate variant SKU: ${sku}`);
+    seenSkus.add(sku);
+
+    const variantPrice = optionalMoney(variant.price);
+    const variantCompareAtPrice = optionalMoney(variant.compareAtPrice);
+    validateCompareAtPrice(variantPrice ?? productPrice, variantCompareAtPrice);
+
+    return {
+      sku,
+      title: variant.title || "Default",
+      option1_name: variant.option1Name || null,
+      option1_value: variant.option1Value || null,
+      option2_name: variant.option2Name || null,
+      option2_value: variant.option2Value || null,
+      option3_name: variant.option3Name || null,
+      option3_value: variant.option3Value || null,
+      option4_name: variant.option4Name || null,
+      option4_value: variant.option4Value || null,
+      price: variantPrice,
+      compare_at_price: variantCompareAtPrice,
+      inventory_qty: Math.max(0, Math.floor(Number(variant.inventoryQty || 0))),
+      track_inventory: variant.trackInventory !== false,
+      position: Number(variant.position ?? index),
+    };
+  });
+
+  const { data: skuConflicts, error: skuConflictError } = await supabase
+    .from("product_variants")
+    .select("sku, product_id")
+    .in("sku", normalizedVariants.map((variant: any) => variant.sku));
+  if (skuConflictError) throw new Error("Unable to validate variant SKUs");
+  const foreignSku = (skuConflicts || []).find((variant: any) => (
+    !product.id || variant.product_id !== product.id
+  ));
+  if (foreignSku) throw new Error(`Variant SKU already belongs to another product: ${foreignSku.sku}`);
 
   const payload = {
     handle: product.handle,
@@ -205,12 +254,51 @@ async function saveProduct(supabase: any, product: any) {
   if (!payload.handle || !payload.title || !payload.price) throw new Error("Title, handle, and price are required");
   if (payload.status === "active" && imageInputs.length === 0) throw new Error("Active products need at least one Cloudinary product photo");
 
-  const { data: saved, error } = await supabase
-    .from("products")
-    .upsert(payload, { onConflict: "handle" })
-    .select("id")
-    .single();
+  let saved: { id: string } | null = null;
+  let error: any = null;
+  let previousHandle: string | null = null;
+  if (product.id) {
+    const { data: current, error: currentError } = await supabase
+      .from("products")
+      .select("id, handle")
+      .eq("id", product.id)
+      .single();
+    if (currentError || !current) throw new Error("Product to edit was not found");
+    previousHandle = current.handle;
+
+    if (current.handle !== payload.handle) {
+      const { error: redirectError } = await supabase
+        .from("product_handle_redirects")
+        .upsert({ old_handle: current.handle, product_id: current.id }, { onConflict: "old_handle" });
+      if (redirectError) throw new Error("Unable to preserve the previous product URL");
+    }
+
+    const result = await supabase
+      .from("products")
+      .update(payload)
+      .eq("id", product.id)
+      .select("id")
+      .single();
+    saved = result.data;
+    error = result.error;
+  } else {
+    const result = await supabase
+      .from("products")
+      .insert(payload)
+      .select("id")
+      .single();
+    saved = result.data;
+    error = result.error;
+  }
   if (error || !saved) throw new Error("Unable to save product");
+
+  if (previousHandle && previousHandle !== payload.handle) {
+    const { error: reviewHandleError } = await supabase
+      .from("reviews")
+      .update({ product_handle: payload.handle })
+      .eq("product_id", saved.id);
+    if (reviewHandleError) throw new Error("Unable to update product review links");
+  }
 
   if (Array.isArray(product.images)) {
     await supabase.from("product_images").delete().eq("product_id", saved.id);
@@ -238,37 +326,19 @@ async function saveProduct(supabase: any, product: any) {
     if (videos.length) await supabase.from("product_videos").insert(videos);
   }
 
-  const variants = Array.isArray(product.variants)
-    ? product.variants
-    : product.variant
-      ? [product.variant]
-      : [];
+  const { error: deleteVariantsError } = await supabase
+    .from("product_variants")
+    .delete()
+    .eq("product_id", saved.id);
+  if (deleteVariantsError) throw new Error("Unable to replace product variants");
 
-  if (variants.length) {
-    await supabase.from("product_variants").delete().eq("product_id", saved.id);
-  }
-
-  for (const variant of variants) {
-    const sku = variant.sku || `${product.handle}-${variant.title || "default"}`.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-    const variantPrice = optionalMoney(variant.price);
-    const variantCompareAtPrice = optionalMoney(variant.compareAtPrice);
-    validateCompareAtPrice(variantPrice ?? productPrice, variantCompareAtPrice);
-
-    await supabase.from("product_variants").upsert({
+  const { error: insertVariantsError } = await supabase
+    .from("product_variants")
+    .insert(normalizedVariants.map((variant: any) => ({
       product_id: saved.id,
-      sku,
-      title: variant.title || "Default",
-      option1_name: variant.option1Name || null,
-      option1_value: variant.option1Value || null,
-      option2_name: variant.option2Name || null,
-      option2_value: variant.option2Value || null,
-      price: variantPrice,
-      compare_at_price: variantCompareAtPrice,
-      inventory_qty: Number(variant.inventoryQty || 0),
-      track_inventory: variant.trackInventory !== false,
-      position: Number(variant.position || 0),
-    }, { onConflict: "sku" });
-  }
+      ...variant,
+    })));
+  if (insertVariantsError) throw new Error("Unable to save product variants");
 
   return saved.id;
 }
@@ -336,7 +406,10 @@ async function saveSiteSettings(supabase: any, settings: any) {
   const payload = {
     id: "global",
     hero: settings.hero || {},
-    navbar: settings.navbar || {},
+    navbar: {
+      ...(settings.navbar || {}),
+      commerceSchemaVersion: 2,
+    },
     promo_popup: settings.promoPopup || settings.promo_popup || {},
   };
 
@@ -395,6 +468,10 @@ serve(async (req: Request): Promise<Response> => {
   try {
     if (req.method === "POST") {
       const body = await req.json();
+
+      if (body.action === "capabilities") {
+        return json({ productVariantsVersion: 2 });
+      }
 
       if (body.action === "change-password") {
         const currentPassword = String(body.currentPassword || "");

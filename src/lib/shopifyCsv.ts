@@ -24,6 +24,10 @@ export type AdminImportProduct = {
     option1Value: string | null;
     option2Name: string | null;
     option2Value: string | null;
+    option3Name?: string | null;
+    option3Value?: string | null;
+    option4Name?: string | null;
+    option4Value?: string | null;
     price: number;
     compareAtPrice: number | null;
     inventoryQty: number;

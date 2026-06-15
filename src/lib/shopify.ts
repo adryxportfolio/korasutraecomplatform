@@ -2,6 +2,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { loadLocalProductByHandle, loadLocalShopifyProducts } from "@/lib/localCommerce";
 import { textMatchesCatalogQuery } from "@/lib/catalogTaxonomy";
+import { resolveProductHandle, type ProductHandleResolution } from "@/lib/productHandleResolution";
 
 export interface ShopifyProduct {
   node: {
@@ -102,6 +103,10 @@ type CatalogProductRow = {
     option1_value: string | null;
     option2_name: string | null;
     option2_value: string | null;
+    option3_name: string | null;
+    option3_value: string | null;
+    option4_name: string | null;
+    option4_value: string | null;
     price: number | string | null;
     compare_at_price: number | string | null;
     inventory_qty: number;
@@ -132,6 +137,8 @@ function selectedOptionsForVariant(variant: CatalogProductRow["product_variants"
   return [
     variant.option1_name && variant.option1_value ? { name: variant.option1_name, value: variant.option1_value } : null,
     variant.option2_name && variant.option2_value ? { name: variant.option2_name, value: variant.option2_value } : null,
+    variant.option3_name && variant.option3_value ? { name: variant.option3_name, value: variant.option3_value } : null,
+    variant.option4_name && variant.option4_value ? { name: variant.option4_name, value: variant.option4_value } : null,
   ].filter(Boolean) as Array<{ name: string; value: string }>;
 }
 
@@ -248,22 +255,52 @@ export function filterProductsWithImages(products: ShopifyProduct[]) {
   return products.filter(productHasRenderableImage);
 }
 
-function baseProductSelect() {
-  return "id, title, description, handle, tags, seo_title, seo_description, price, compare_at_price, fabric, technique, color, has_blouse_piece, category:categories(slug, name), product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value, price, compare_at_price, inventory_qty, track_inventory, position)";
+function baseProductSelect(includeExtendedVariantOptions = true) {
+  const extendedOptions = includeExtendedVariantOptions
+    ? ", option3_name, option3_value, option4_name, option4_value"
+    : "";
+  return `id, title, description, handle, tags, seo_title, seo_description, price, compare_at_price, fabric, technique, color, has_blouse_piece, category:categories(slug, name), product_images(url, alt_text, position), product_videos(url, alt_text, position, content_type), product_variants(id, sku, title, option1_name, option1_value, option2_name, option2_value${extendedOptions}, price, compare_at_price, inventory_qty, track_inventory, position)`;
+}
+
+export function catalogSupportsExtendedVariants(navbar: unknown) {
+  if (!navbar || typeof navbar !== "object") return false;
+  return Number((navbar as Record<string, unknown>).commerceSchemaVersion || 0) >= 2;
+}
+
+let extendedVariantSupportPromise: Promise<boolean> | null = null;
+
+function supportsExtendedVariantOptions() {
+  if (!extendedVariantSupportPromise) {
+    extendedVariantSupportPromise = (async () => {
+      const { data, error } = await (supabase as any)
+        .from("site_settings")
+        .select("navbar")
+        .eq("id", "global")
+        .maybeSingle();
+      if (error) return false;
+      return catalogSupportsExtendedVariants(data?.navbar);
+    })();
+  }
+  return extendedVariantSupportPromise;
+}
+
+async function loadActiveProductRows(requestLimit: number) {
+  const includeExtendedVariantOptions = await supportsExtendedVariantOptions();
+  const runQuery = (includeExtendedVariantOptions: boolean) => (supabase as any)
+    .from("products")
+    .select(baseProductSelect(includeExtendedVariantOptions))
+    .eq("status", "active")
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(requestLimit);
+
+  return runQuery(includeExtendedVariantOptions);
 }
 
 export async function fetchProducts(first: number = 20, query?: string): Promise<ShopifyProduct[]> {
   try {
     const requestLimit = query?.trim() ? Math.max(first, 500) : Math.max(first, 100);
-    const request = (supabase as any)
-      .from("products")
-      .select(baseProductSelect())
-      .eq("status", "active")
-      .order("position", { ascending: true })
-      .order("created_at", { ascending: false })
-      .limit(requestLimit);
-
-    const { data, error } = await request;
+    const { data, error } = await loadActiveProductRows(requestLimit);
     if (error) throw error;
     if (!data?.length) return filterProductsWithImages(await loadLocalShopifyProducts(first, query));
     const rows = query?.trim()
@@ -276,21 +313,56 @@ export async function fetchProducts(first: number = 20, query?: string): Promise
   }
 }
 
-export async function fetchProductByHandle(handle: string): Promise<ShopifyProduct["node"] | null> {
-  try {
-    const { data, error } = await (supabase as any)
-      .from("products")
-      .select(baseProductSelect())
-      .eq("handle", handle)
-      .eq("status", "active")
-      .single();
+async function fetchCurrentProductByHandle(handle: string) {
+  const includeExtendedVariantOptions = await supportsExtendedVariantOptions();
+  const runQuery = (includeExtendedVariantOptions: boolean) => (supabase as any)
+    .from("products")
+    .select(baseProductSelect(includeExtendedVariantOptions))
+    .eq("handle", handle)
+    .eq("status", "active")
+    .maybeSingle();
 
-    if (error || !data) return loadLocalProductByHandle(handle);
-    const product = mapCatalogProduct(data);
-    return productHasRenderableImage(product) ? product.node : null;
+  const { data, error } = await runQuery(includeExtendedVariantOptions);
+  if (error) throw error;
+  if (!data) return null;
+  const product = mapCatalogProduct(data);
+  return productHasRenderableImage(product) ? product.node : null;
+}
+
+async function fetchRedirectHandle(oldHandle: string) {
+  const { data, error } = await (supabase as any)
+    .from("product_handle_redirects")
+    .select("product:products(handle)")
+    .eq("old_handle", oldHandle)
+    .maybeSingle();
+
+  if (error) throw error;
+  const product = Array.isArray(data?.product) ? data.product[0] : data?.product;
+  return String(product?.handle || "") || null;
+}
+
+export async function fetchProductByHandle(
+  handle: string,
+): Promise<ProductHandleResolution<ShopifyProduct["node"]>> {
+  try {
+    const result = await resolveProductHandle(handle, {
+      loadCurrent: fetchCurrentProductByHandle,
+      loadRedirect: fetchRedirectHandle,
+    });
+    if (result.product) return result;
+
+    const localProduct = await loadLocalProductByHandle(handle);
+    return {
+      product: localProduct,
+      canonicalHandle: localProduct?.handle || null,
+    };
   } catch (error) {
     console.error("Error fetching catalog product:", error);
-    return loadLocalProductByHandle(handle);
+    const localProduct = await loadLocalProductByHandle(handle);
+    return {
+      product: localProduct,
+      canonicalHandle: localProduct?.handle || null,
+    };
   }
 }
 

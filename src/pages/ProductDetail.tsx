@@ -17,6 +17,7 @@ import { SwipeableImageGallery } from '@/components/SwipeableImageGallery';
 import { StickyMobileCartBar } from '@/components/StickyMobileCartBar';
 import { RecentlyViewed } from '@/components/RecentlyViewed';
 import { ProductPrice } from '@/components/ProductPrice';
+import { findExactVariant } from '@/lib/productVariantSelection';
 
 import {
   Accordion,
@@ -437,10 +438,14 @@ export default function ProductDetail() {
       if (!handle) return;
       setLoading(true);
       
-      const [productData, allProducts] = await Promise.all([
+      const [productResult, allProducts] = await Promise.all([
         fetchProductByHandle(handle),
         fetchProducts(20)
       ]);
+      const productData = productResult.product;
+      if (productResult.canonicalHandle && productResult.canonicalHandle !== handle) {
+        navigate(`/products/${productResult.canonicalHandle}`, { replace: true });
+      }
       
       setProduct(productData);
       setRelatedProducts(allProducts);
@@ -461,19 +466,19 @@ export default function ProductDetail() {
     loadProduct();
 
     return subscribeToStorefrontRealtime(supabase, `pdp-catalog-${handle || 'unknown'}`, loadProduct);
-  }, [handle, addToRecentlyViewed]);
+  }, [handle, addToRecentlyViewed, navigate]);
 
   const handleOptionChange = (optionName: string, value: string) => {
     const newOptions = { ...selectedOptions, [optionName]: value };
     setSelectedOptions(newOptions);
     
-    const matchingVariant = product?.variants.edges.find(({ node }) => 
-      node.selectedOptions.every(opt => newOptions[opt.name] === opt.value)
-    );
-    
-    if (matchingVariant) {
-      setSelectedVariant(matchingVariant.node.id);
-    }
+    const requiredOptionNames = product?.options
+      .filter((option) => option.name !== 'Title')
+      .map((option) => option.name) || [];
+    const matchingVariant = product
+      ? findExactVariant(product.variants.edges, newOptions, requiredOptionNames)
+      : null;
+    setSelectedVariant(matchingVariant?.id || null);
   };
 
   const getCurrentVariant = () => {
@@ -854,7 +859,14 @@ export default function ProductDetail() {
               <div className="border border-border rounded-sm overflow-hidden">
                 <div className="p-3 md:p-4 bg-accent/5 border-b border-border">
                   <div className="flex flex-col items-center justify-center gap-2">
-                    {currentVariant?.availableForSale ? (
+                    {!currentVariant ? (
+                      <Button
+                        disabled
+                        className="w-full h-11 md:h-12 text-sm md:text-base font-body uppercase tracking-widest rounded-full"
+                      >
+                        Select all options
+                      </Button>
+                    ) : currentVariant.availableForSale ? (
                       <>
                         {/* Buy Now Button */}
                         <Button

@@ -103,6 +103,10 @@ function productToAdminRow(product: AdminImportProduct & { videos?: any[] }, ind
       option1_value: variant.option1Value,
       option2_name: variant.option2Name,
       option2_value: variant.option2Value,
+      option3_name: variant.option3Name,
+      option3_value: variant.option3Value,
+      option4_name: variant.option4Name,
+      option4_value: variant.option4Value,
       price: variant.price || product.price,
       compare_at_price: variant.compareAtPrice,
       inventory_qty: Math.max(variant.inventoryQty, 0),
@@ -178,6 +182,8 @@ export function adminRowToShopifyProduct(row: any): ShopifyProduct {
             selectedOptions: [
               variant.option1_name && variant.option1_value ? { name: variant.option1_name, value: variant.option1_value } : null,
               variant.option2_name && variant.option2_value ? { name: variant.option2_name, value: variant.option2_value } : null,
+              variant.option3_name && variant.option3_value ? { name: variant.option3_name, value: variant.option3_value } : null,
+              variant.option4_name && variant.option4_value ? { name: variant.option4_name, value: variant.option4_value } : null,
             ].filter(Boolean) as Array<{ name: string; value: string }>,
           },
         })),
@@ -193,6 +199,8 @@ function buildOptions(variants: any[]) {
     [
       variant.option1_name && variant.option1_value ? { name: variant.option1_name, value: variant.option1_value } : null,
       variant.option2_name && variant.option2_value ? { name: variant.option2_name, value: variant.option2_value } : null,
+      variant.option3_name && variant.option3_value ? { name: variant.option3_name, value: variant.option3_value } : null,
+      variant.option4_name && variant.option4_value ? { name: variant.option4_name, value: variant.option4_value } : null,
     ].filter(Boolean).forEach((option: any) => {
       if (!options.has(option.name)) options.set(option.name, new Set());
       options.get(option.name)?.add(option.value);
@@ -275,7 +283,14 @@ export async function loadLocalShopifyProducts(first = 100, query?: string): Pro
 
 export async function loadLocalProductByHandle(handle: string) {
   const products = await loadLocalShopifyProducts(500);
-  return products.find((product) => product.node.handle === handle)?.node || null;
+  const direct = products.find((product) => product.node.handle === handle)?.node;
+  if (direct) return direct;
+
+  const rows = await loadLocalAdminProducts();
+  const redirected = rows.find((product) => (
+    Array.isArray(product.previous_handles) && product.previous_handles.includes(handle)
+  ));
+  return redirected ? adminRowToShopifyProduct(redirected).node : null;
 }
 
 export async function canUseLocalAdmin(username: string, password: string) {
@@ -334,11 +349,34 @@ export async function saveLocalProduct(product: any) {
     variants,
   };
   const row = productToAdminRow(importProduct, products.length);
-  const existingIndex = products.findIndex((item) => item.handle === row.handle);
-  if (existingIndex >= 0) products[existingIndex] = { ...products[existingIndex], ...row, id: products[existingIndex].id };
-  else products.unshift(row);
+  const existingIndex = product.id
+    ? products.findIndex((item) => item.id === product.id)
+    : products.findIndex((item) => item.handle === row.handle);
+  if (existingIndex >= 0) {
+    const existing = products[existingIndex];
+    const previousHandles = Array.from(new Set([
+      ...(existing.previous_handles || []),
+      ...(existing.handle && existing.handle !== row.handle ? [existing.handle] : []),
+    ]));
+    const stableId = existing.id;
+    products[existingIndex] = {
+      ...existing,
+      ...row,
+      id: stableId,
+      previous_handles: previousHandles,
+      product_images: row.product_images.map((image) => ({ ...image, product_id: stableId })),
+      product_videos: row.product_videos.map((video) => ({ ...video, product_id: stableId })),
+      product_variants: row.product_variants.map((variant) => ({
+        ...variant,
+        product_id: stableId,
+        product: { title: row.title, handle: row.handle },
+      })),
+    };
+  } else {
+    products.unshift(row);
+  }
   writeStoredProducts(products);
-  return row.id;
+  return existingIndex >= 0 ? products[existingIndex].id : row.id;
 }
 
 export function removeLocalProductRows(products: any[], productId: string) {

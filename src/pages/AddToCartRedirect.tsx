@@ -25,7 +25,8 @@ export default function AddToCartRedirect() {
 
     const addFromUrl = async () => {
       const params = parseAddToCartParams(searchParams);
-      const product = await fetchProductByHandle(handle);
+      const productResult = await fetchProductByHandle(handle);
+      const product = productResult.product;
       if (!product) {
         setStatus("Product not found.");
         toast.error("Product not found", { position: "top-center" });

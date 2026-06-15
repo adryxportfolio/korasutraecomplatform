@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  blouseAttributeOptions,
   productHasSareeBlousePiece,
+  productMatchesBlouseAttributes,
   productMatchesCollectionQuery,
   productMatchesCollectionScope,
+  productMatchesProductTypes,
 } from "./collectionProductFilters";
 
 describe("collection product filters", () => {
@@ -54,7 +57,7 @@ describe("collection product filters", () => {
     }, "cotton")).toBe(true);
   });
 
-  test("scopes saree collection pages to sarees while allowing both blouse-piece states", () => {
+  test("shows both product categories on all-products while saree routes stay scoped", () => {
     expect(productMatchesCollectionScope({
       title: "Saree With Blouse Piece",
       category: { slug: "sarees", name: "Sarees" },
@@ -68,7 +71,12 @@ describe("collection product filters", () => {
     expect(productMatchesCollectionScope({
       title: "Standalone Blouse",
       category: { slug: "blouses", name: "Blouses" },
-    }, "all")).toBe(false);
+    }, "all")).toBe(true);
+
+    expect(productMatchesCollectionScope({
+      title: "Standalone Blouse",
+      category: { slug: "blouses", name: "Blouses" },
+    }, "cotton")).toBe(false);
   });
 
   test("shows the blouse-piece badge only for saree products", () => {
@@ -85,5 +93,84 @@ describe("collection product filters", () => {
       category: { slug: "sarees", name: "Sarees" },
       tags: ["with blouse"],
     })).toBe(true);
+  });
+
+  test("shows both product types by default and allows either type alone", () => {
+    const saree = { category: { slug: "sarees", name: "Sarees" } };
+    const blouse = { category: { slug: "blouses", name: "Blouses" } };
+
+    expect(productMatchesProductTypes(saree, ["sarees", "blouses"])).toBe(true);
+    expect(productMatchesProductTypes(blouse, ["sarees", "blouses"])).toBe(true);
+    expect(productMatchesProductTypes(saree, ["blouses"])).toBe(false);
+    expect(productMatchesProductTypes(blouse, ["blouses"])).toBe(true);
+  });
+
+  test("extracts custom blouse attribute values from variants", () => {
+    expect(blouseAttributeOptions([{
+      category: { slug: "blouses", name: "Blouses" },
+      variants: [{
+        selectedOptions: [
+          { name: "Size", value: "34" },
+          { name: "Sleeves", value: "Sleeveless" },
+          { name: "Neck", value: "Halter" },
+          { name: "Close Type", value: "Zip" },
+        ],
+      }, {
+        selectedOptions: [
+          { name: "Size", value: "36" },
+          { name: "Sleeves", value: "Full Sleeve" },
+          { name: "Neck", value: "V Neck" },
+          { name: "Close Type", value: "Hook" },
+        ],
+      }],
+    }])).toEqual({
+      sleeves: ["Sleeveless", "Full Sleeve"],
+      necks: ["Halter", "V Neck"],
+      closeTypes: ["Zip", "Hook"],
+    });
+  });
+
+  test("uses OR within blouse attributes, AND across sections, and keeps selected sarees", () => {
+    const blouse = {
+      category: { slug: "blouses", name: "Blouses" },
+      variants: [{
+        selectedOptions: [
+          { name: "Sleeves", value: "Sleeveless" },
+          { name: "Neck", value: "Halter" },
+          { name: "Close Type", value: "Zip" },
+        ],
+      }, {
+        selectedOptions: [
+          { name: "Sleeves", value: "Full Sleeve" },
+          { name: "Neck", value: "V Neck" },
+          { name: "Close Type", value: "Hook" },
+        ],
+      }],
+    };
+    const saree = { category: { slug: "sarees", name: "Sarees" }, variants: [] };
+
+    expect(productMatchesBlouseAttributes(blouse, {
+      sleeves: ["Cap Sleeve", "Sleeveless"],
+      necks: ["Halter"],
+      closeTypes: [],
+    }, ["sarees", "blouses"])).toBe(true);
+
+    expect(productMatchesBlouseAttributes(blouse, {
+      sleeves: ["Sleeveless"],
+      necks: ["V Neck"],
+      closeTypes: [],
+    }, ["sarees", "blouses"])).toBe(false);
+
+    expect(productMatchesBlouseAttributes(saree, {
+      sleeves: ["Sleeveless"],
+      necks: [],
+      closeTypes: [],
+    }, ["sarees", "blouses"])).toBe(true);
+
+    expect(productMatchesBlouseAttributes(saree, {
+      sleeves: ["Sleeveless"],
+      necks: [],
+      closeTypes: [],
+    }, ["blouses"])).toBe(false);
   });
 });

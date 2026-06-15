@@ -8,6 +8,7 @@ import { Footer } from '@/components/Footer';
 import { fetchPublishedJournals, type LiveJournalArticle } from '@/lib/journals';
 import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
 import { supabase } from '@/integrations/supabase/client';
+import { koraSutraStructuredDataLogoUrl } from '@/lib/brandAssets';
 
 export default function JournalArticle() {
   const { slug } = useParams<{ slug: string }>();
@@ -68,7 +69,7 @@ export default function JournalArticle() {
     publisher: {
       "@type": "Organization",
       name: "Korasutra",
-      logo: { "@type": "ImageObject", url: "https://korasutra.com/favicon.png" }
+      logo: { "@type": "ImageObject", url: koraSutraStructuredDataLogoUrl }
     },
     mainEntityOfPage: `https://korasutra.com/journals/${article.slug}`,
     keywords: article.keywords.join(', ')

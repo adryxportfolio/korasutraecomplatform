@@ -117,7 +117,7 @@ export function buildOrganizationJsonLd() {
     url: SEO_CONFIG.siteUrl,
     logo: {
       "@type": "ImageObject",
-      url: `${SEO_CONFIG.siteUrl}/favicon.png`,
+      url: koraSutraStructuredDataLogoUrl,
       width: 512,
       height: 512,
     },
@@ -229,3 +229,4 @@ export function buildProductJsonLd(input: {
     },
   };
 }
+import { koraSutraStructuredDataLogoUrl } from "@/lib/brandAssets";

@@ -89,9 +89,16 @@ import { buildProductExportCsv, buildProductFeedXml } from "@/lib/productFeeds";
 import { blousePieceDisplayText } from "@/lib/productPresentation";
 import { seoAuditEvents, seoPractices } from "@/lib/seoPractices";
 import {
+  MAX_BLOUSE_VARIANTS,
   buildAdminProductVariants,
-  createBlouseSizeRows,
+  createBlouseEditorState,
+  generateBlouseVariantRows,
+  parseCustomOptionValues,
+  type BlouseOptionInputs,
+  type BlouseSizeRow,
+  type BlouseVariantRow,
 } from "@/lib/blouseVariants";
+import { buildSkuPrefixedHandle } from "@/lib/productHandles";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const LOCAL_ADMIN_FALLBACK_ENABLED = (import.meta.env?.VITE_ENABLE_LOCAL_ADMIN_FALLBACK ?? "false") === "true";
@@ -101,6 +108,50 @@ type PendingProductImageUpload = { dataUrl: string; fileName: string; contentTyp
 type ProductImageFormItem =
   | { id: string; kind: "stored"; url: string }
   | { id: string; kind: "upload"; dataUrl: string; fileName: string; contentType: string };
+
+const emptyBlouseOptionInputs: BlouseOptionInputs = {
+  sleeves: "",
+  necks: "",
+  closeTypes: "",
+};
+
+function createEmptyProductForm() {
+  const blouseEditor = createBlouseEditorState();
+  return {
+    id: "",
+    previousHandle: "",
+    title: "",
+    handle: "",
+    categorySlug: "sarees",
+    description: "",
+    shortDescription: "",
+    price: "",
+    compareAtPrice: "",
+    fabric: "",
+    technique: "",
+    color: "",
+    status: "active",
+    hasBlousePiece: false,
+    imageUrl: "",
+    imageDataUrl: "",
+    imageFileName: "",
+    imageContentType: "",
+    imageUploads: [] as PendingProductImageUpload[],
+    imageItems: [] as ProductImageFormItem[],
+    videoUrl: "",
+    videoDataUrl: "",
+    videoFileName: "",
+    videoContentType: "",
+    sku: "",
+    inventoryQty: "1",
+    blouseSizeRows: blouseEditor.sizeRows,
+    blouseOptionInputs: { ...emptyBlouseOptionInputs },
+    blouseVariantRows: [] as BlouseVariantRow[],
+    seoTitle: "",
+    seoDescription: "",
+    catalogSelection: { fabric: [] as string[], pattern: [] as string[], occasion: [] as string[] },
+  };
+}
 
 const navItems: Array<{ id: AdminSection; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -208,36 +259,7 @@ export default function Admin() {
   const [siteSettingsForm, setSiteSettingsForm] = useState<SiteSettings>(defaultSiteSettings);
   const [heroDesktopFile, setHeroDesktopFile] = useState<{ dataUrl: string; fileName: string; contentType: string } | null>(null);
   const [heroMobileFile, setHeroMobileFile] = useState<{ dataUrl: string; fileName: string; contentType: string } | null>(null);
-  const [productForm, setProductForm] = useState({
-    title: "",
-    handle: "",
-    categorySlug: "sarees",
-    description: "",
-    shortDescription: "",
-    price: "",
-    compareAtPrice: "",
-    fabric: "",
-    technique: "",
-    color: "",
-    status: "active",
-    hasBlousePiece: false,
-    imageUrl: "",
-    imageDataUrl: "",
-    imageFileName: "",
-    imageContentType: "",
-    imageUploads: [] as PendingProductImageUpload[],
-    imageItems: [] as ProductImageFormItem[],
-    videoUrl: "",
-    videoDataUrl: "",
-    videoFileName: "",
-    videoContentType: "",
-    sku: "",
-    inventoryQty: "1",
-    blouseSizeRows: createBlouseSizeRows(),
-    seoTitle: "",
-    seoDescription: "",
-    catalogSelection: { fabric: [] as string[], pattern: [] as string[], occasion: [] as string[] },
-  });
+  const [productForm, setProductForm] = useState(createEmptyProductForm);
   const [couponForm, setCouponForm] = useState({
     id: "",
     code: "",
@@ -288,7 +310,7 @@ export default function Admin() {
     publishedAt: "",
   });
 
-  const resetProductForm = () => setProductForm({ title: "", handle: "", categorySlug: "sarees", description: "", shortDescription: "", price: "", compareAtPrice: "", fabric: "", technique: "", color: "", status: "active", hasBlousePiece: false, imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", imageUploads: [], imageItems: [], videoUrl: "", videoDataUrl: "", videoFileName: "", videoContentType: "", sku: "", inventoryQty: "1", blouseSizeRows: createBlouseSizeRows(), seoTitle: "", seoDescription: "", catalogSelection: { fabric: [], pattern: [], occasion: [] } });
+  const resetProductForm = () => setProductForm(createEmptyProductForm());
   const resetCouponForm = () => setCouponForm({ id: "", code: "", description: "", status: "active", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscountCap: "", usageLimitTotal: "", usageLimitPerCustomer: "", firstOrderOnly: false, startAt: "", endAt: "", neverExpires: false, appliesTo: "all", includedProductIds: "", includedCategorySlugs: "", includedTags: "", excludedProductIds: "", excludedCategorySlugs: "", excludeSaleItems: false, canCombineWithCoupons: false, canCombineWithSalePrices: true, autoApply: false, displayOnWebsite: false, priority: "0", buyQuantity: "", getQuantity: "" });
   const resetJournalForm = () => setJournalForm({ id: "", title: "", slug: "", excerpt: "", content: "", imageUrl: "", imageDataUrl: "", imageFileName: "", imageContentType: "", category: "Journal", author: "Kora Sutra", readTime: "3 min read", keywords: "", seoTitle: "", seoDescription: "", status: "draft", publishedAt: "" });
   const isLocalAdmin = canUseLocalAdminMode(adminToken, LOCAL_ADMIN_FALLBACK_ENABLED);
@@ -301,6 +323,9 @@ export default function Admin() {
       if (action === "upsert-product") {
         const productId = await saveLocalProduct(options.body?.product || {});
         return { success: true, productId };
+      }
+      if (action === "capabilities") {
+        return { productVariantsVersion: 2 };
       }
       if (action === "bulk-import-products") {
         return importLocalProducts((options.body?.products || []) as AdminImportProduct[]);
@@ -529,6 +554,84 @@ export default function Admin() {
     { slug: "blouses", name: "Blouses" },
   ];
   const productImageItems = productForm.imageItems.slice(0, 12);
+  const projectedBlouseVariantCount = useMemo(() => {
+    if (productForm.categorySlug !== "blouses") return 0;
+    const enabledSizes = productForm.blouseSizeRows.filter((row) => row.enabled).length;
+    return enabledSizes
+      * parseCustomOptionValues(productForm.blouseOptionInputs.sleeves).length
+      * parseCustomOptionValues(productForm.blouseOptionInputs.necks).length
+      * parseCustomOptionValues(productForm.blouseOptionInputs.closeTypes).length;
+  }, [productForm.categorySlug, productForm.blouseOptionInputs, productForm.blouseSizeRows]);
+
+  useEffect(() => {
+    if (!productForm.title.trim()) {
+      if (productForm.handle) setProductForm((current) => ({ ...current, handle: "" }));
+      return;
+    }
+
+    const firstSku = productForm.categorySlug === "blouses"
+      ? productForm.blouseVariantRows[0]?.sku
+      : productForm.sku.trim() || `KS-${slugify(productForm.title).toUpperCase()}`;
+    if (!firstSku) return;
+
+    const nextHandle = buildSkuPrefixedHandle(firstSku, productForm.title);
+    if (nextHandle !== productForm.handle) {
+      setProductForm((current) => ({ ...current, handle: nextHandle }));
+    }
+  }, [
+    productForm.blouseVariantRows,
+    productForm.categorySlug,
+    productForm.handle,
+    productForm.sku,
+    productForm.title,
+  ]);
+
+  const regenerateBlouseRows = (
+    title: string,
+    sizeRows: BlouseSizeRow[],
+    optionInputs: BlouseOptionInputs,
+    savedRows: BlouseVariantRow[],
+  ) => {
+    try {
+      return generateBlouseVariantRows({
+        handleSeed: slugify(title) || "blouse",
+        sizeRows,
+        optionInputs,
+        savedRows,
+      });
+    } catch {
+      return [];
+    }
+  };
+
+  const updateBlouseSizeRows = (sizeRows: BlouseSizeRow[]) => {
+    setProductForm((current) => ({
+      ...current,
+      blouseSizeRows: sizeRows,
+      blouseVariantRows: regenerateBlouseRows(
+        current.title,
+        sizeRows,
+        current.blouseOptionInputs,
+        current.blouseVariantRows,
+      ),
+    }));
+  };
+
+  const updateBlouseOptionInput = (field: keyof BlouseOptionInputs, value: string) => {
+    setProductForm((current) => {
+      const optionInputs = { ...current.blouseOptionInputs, [field]: value };
+      return {
+        ...current,
+        blouseOptionInputs: optionInputs,
+        blouseVariantRows: regenerateBlouseRows(
+          current.title,
+          current.blouseSizeRows,
+          optionInputs,
+          current.blouseVariantRows,
+        ),
+      };
+    });
+  };
 
   const setProductImageItems = (items: ProductImageFormItem[]) => {
     const nextItems = items.slice(0, 12);
@@ -646,16 +749,27 @@ export default function Admin() {
     try {
       const compareAtError = validateCompareAtPrice(productForm.price, productForm.compareAtPrice);
       if (compareAtError) throw new Error(compareAtError);
-      const productHandle = productForm.handle || slugify(productForm.title);
+      try {
+        const capabilities = await api({
+          method: "POST",
+          body: { action: "capabilities" },
+        });
+        if (capabilities.productVariantsVersion !== 2) throw new Error();
+      } catch {
+        throw new Error("The product variants database upgrade is not deployed yet. Product saving is temporarily disabled to protect inventory.");
+      }
       const variants = buildAdminProductVariants({
         categorySlug: productForm.categorySlug,
-        handle: productHandle,
+        handle: slugify(productForm.title),
         sku: productForm.sku,
         inventoryQty: productForm.inventoryQty,
         price: productForm.price,
         compareAtPrice: productForm.compareAtPrice,
         blouseSizeRows: productForm.blouseSizeRows,
+        blouseOptionInputs: productForm.blouseOptionInputs,
+        blouseVariantRows: productForm.blouseVariantRows,
       });
+      const productHandle = buildSkuPrefixedHandle(variants[0]?.sku || "", productForm.title);
 
       const orderedImages = await uploadProductImages();
       const uploadedVideo = await uploadProductMedia("video");
@@ -681,6 +795,8 @@ export default function Admin() {
           action: "upsert-product",
           product: {
             ...productForm,
+            id: productForm.id || undefined,
+            previousHandle: productForm.previousHandle || undefined,
             handle: productHandle,
             tags: catalogTags,
             images: productImages,
@@ -701,6 +817,7 @@ export default function Admin() {
 
   const editProduct = (product: any) => {
     const firstVariant = product.product_variants?.[0];
+    const blouseEditor = createBlouseEditorState(product.product_variants || []);
     const storedImageItems: ProductImageFormItem[] = [...(product.product_images || [])]
       .sort((a: any, b: any) => a.position - b.position)
       .map((image: any) => image.url)
@@ -709,6 +826,8 @@ export default function Admin() {
     const imageUrls = storedImageUrlsFromItems(storedImageItems);
     const firstVideo = [...(product.product_videos || [])].sort((a: any, b: any) => a.position - b.position)[0];
     setProductForm({
+      id: product.id || "",
+      previousHandle: product.handle || "",
       title: product.title || "",
       handle: product.handle || "",
       categorySlug: product.category?.slug || "sarees",
@@ -733,7 +852,9 @@ export default function Admin() {
       videoContentType: firstVideo?.content_type || "",
       sku: firstVariant?.sku || "",
       inventoryQty: String(firstVariant?.inventory_qty ?? 1),
-      blouseSizeRows: createBlouseSizeRows(product.product_variants || []),
+      blouseSizeRows: blouseEditor.sizeRows,
+      blouseOptionInputs: blouseEditor.optionInputs,
+      blouseVariantRows: blouseEditor.variantRows,
       seoTitle: product.seo_title || "",
       seoDescription: product.seo_description || "",
       catalogSelection: selectionFromTags(product.tags || []),
@@ -1454,8 +1575,28 @@ export default function Admin() {
               <TabsContent value="add">
                 <Panel title="Add / Edit Product">
                   <form onSubmit={saveProduct} className="grid md:grid-cols-2 gap-4">
-                    <Field label="Title"><Input value={productForm.title} onChange={(e) => setProductForm({ ...productForm, title: e.target.value, handle: productForm.handle || slugify(e.target.value) })} required /></Field>
-                    <Field label="Handle"><Input value={productForm.handle} onChange={(e) => setProductForm({ ...productForm, handle: slugify(e.target.value) })} required /></Field>
+                    <Field label="Title">
+                      <Input
+                        value={productForm.title}
+                        onChange={(event) => setProductForm((current) => ({
+                          ...current,
+                          title: event.target.value,
+                          blouseVariantRows: current.categorySlug === "blouses"
+                            ? regenerateBlouseRows(
+                              event.target.value,
+                              current.blouseSizeRows,
+                              current.blouseOptionInputs,
+                              current.blouseVariantRows,
+                            )
+                            : current.blouseVariantRows,
+                        }))}
+                        required
+                      />
+                    </Field>
+                    <Field label="Handle">
+                      <Input value={productForm.handle} readOnly required className="bg-secondary/30" />
+                      <p className="mt-1 text-xs text-muted-foreground">Generated from the first variant SKU and product title.</p>
+                    </Field>
                     <Field label="Category"><Select value={productForm.categorySlug} onValueChange={(value) => setProductForm({ ...productForm, categorySlug: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{categoryOptions.map((category: any) => <SelectItem key={category.slug} value={category.slug}>{category.name}</SelectItem>)}</SelectContent></Select></Field>
                     <Field label="Status"><Select value={productForm.status} onValueChange={(value) => setProductForm({ ...productForm, status: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="draft">Draft</SelectItem><SelectItem value="archived">Archived</SelectItem></SelectContent></Select></Field>
                     <Field label="Price (excluding GST)"><Input value={productForm.price} onChange={(e) => setProductForm({ ...productForm, price: e.target.value })} required type="number" min="0" step="0.01" /></Field>
@@ -1466,47 +1607,102 @@ export default function Admin() {
                     {productForm.categorySlug === "blouses" ? (
                       <div className="md:col-span-2 space-y-3 border border-border rounded-sm p-4">
                         <div>
-                          <p className="text-sm font-medium font-body">Blouse size variants</p>
-                          <p className="text-xs text-muted-foreground">Enable the available sizes and set inventory for each one. Blank SKUs are generated automatically.</p>
+                          <p className="text-sm font-medium font-body">Blouse purchasable variations</p>
+                          <p className="text-xs text-muted-foreground">Every Size, Sleeves, Neck, and Close Type combination has its own SKU and stock.</p>
                         </div>
-                        <div className="space-y-2">
+                        <div className="flex flex-wrap gap-3">
                           {productForm.blouseSizeRows.map((row) => (
-                            <div key={row.size} className="grid grid-cols-1 sm:grid-cols-[72px_1fr_110px] gap-3 items-center rounded-sm border border-border p-3">
-                              <label className="flex items-center gap-2 text-sm font-body">
-                                <Switch
-                                  checked={row.enabled}
-                                  onCheckedChange={(enabled) => setProductForm((current) => ({
-                                    ...current,
-                                    blouseSizeRows: current.blouseSizeRows.map((item) => item.size === row.size ? { ...item, enabled } : item),
-                                  }))}
-                                />
-                                {row.size}
-                              </label>
-                              <Input
-                                value={row.sku}
-                                disabled={!row.enabled}
-                                aria-label={`SKU for blouse size ${row.size}`}
-                                placeholder={`Auto SKU for size ${row.size}`}
-                                onChange={(event) => setProductForm((current) => ({
-                                  ...current,
-                                  blouseSizeRows: current.blouseSizeRows.map((item) => item.size === row.size ? { ...item, sku: event.target.value } : item),
-                                }))}
+                            <label key={row.size} className="flex items-center gap-2 rounded-sm border border-border px-3 py-2 text-sm font-body">
+                              <Switch
+                                checked={row.enabled}
+                                onCheckedChange={(enabled) => updateBlouseSizeRows(
+                                  productForm.blouseSizeRows.map((item) => (
+                                    item.size === row.size ? { ...item, enabled } : item
+                                  )),
+                                )}
                               />
-                              <Input
-                                value={row.inventoryQty}
-                                disabled={!row.enabled}
-                                aria-label={`Inventory for blouse size ${row.size}`}
-                                type="number"
-                                min="0"
-                                step="1"
-                                onChange={(event) => setProductForm((current) => ({
-                                  ...current,
-                                  blouseSizeRows: current.blouseSizeRows.map((item) => item.size === row.size ? { ...item, inventoryQty: event.target.value } : item),
-                                }))}
-                              />
-                            </div>
+                              Size {row.size}
+                            </label>
                           ))}
                         </div>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <Field label="Sleeves values">
+                            <Input
+                              value={productForm.blouseOptionInputs.sleeves}
+                              onChange={(event) => updateBlouseOptionInput("sleeves", event.target.value)}
+                              placeholder="Sleeveless, Cap Sleeve, Full Sleeve"
+                            />
+                          </Field>
+                          <Field label="Neck values">
+                            <Input
+                              value={productForm.blouseOptionInputs.necks}
+                              onChange={(event) => updateBlouseOptionInput("necks", event.target.value)}
+                              placeholder="Halter, V Neck, Round Neck"
+                            />
+                          </Field>
+                          <Field label="Close Type values">
+                            <Input
+                              value={productForm.blouseOptionInputs.closeTypes}
+                              onChange={(event) => updateBlouseOptionInput("closeTypes", event.target.value)}
+                              placeholder="Zip, Hook, Tie"
+                            />
+                          </Field>
+                        </div>
+                        <div className={`rounded-sm border p-3 text-xs ${
+                          projectedBlouseVariantCount > MAX_BLOUSE_VARIANTS
+                            ? "border-destructive bg-destructive/5 text-destructive"
+                            : "border-border bg-secondary/20 text-muted-foreground"
+                        }`}>
+                          {projectedBlouseVariantCount} generated variant{projectedBlouseVariantCount === 1 ? "" : "s"}.
+                          {" "}Maximum {MAX_BLOUSE_VARIANTS}.
+                        </div>
+                        {productForm.blouseVariantRows.length > 0 && (
+                          <div className="overflow-x-auto rounded-sm border border-border">
+                            <table className="w-full min-w-[720px] text-sm">
+                              <thead>
+                                <tr className="border-b border-border bg-secondary/20 text-left">
+                                  <th className="p-3">Variation</th>
+                                  <th className="p-3">SKU</th>
+                                  <th className="p-3 w-32">Stock</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {productForm.blouseVariantRows.map((row) => (
+                                  <tr key={row.key} className="border-b border-border last:border-0">
+                                    <td className="p-3 font-body">{row.size} / {row.sleeves} / {row.neck} / {row.closeType}</td>
+                                    <td className="p-3">
+                                      <Input
+                                        value={row.sku}
+                                        aria-label={`SKU for ${row.size} ${row.sleeves} ${row.neck} ${row.closeType}`}
+                                        onChange={(event) => setProductForm((current) => ({
+                                          ...current,
+                                          blouseVariantRows: current.blouseVariantRows.map((item) => (
+                                            item.key === row.key ? { ...item, sku: event.target.value } : item
+                                          )),
+                                        }))}
+                                      />
+                                    </td>
+                                    <td className="p-3">
+                                      <Input
+                                        value={row.inventoryQty}
+                                        aria-label={`Inventory for ${row.size} ${row.sleeves} ${row.neck} ${row.closeType}`}
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        onChange={(event) => setProductForm((current) => ({
+                                          ...current,
+                                          blouseVariantRows: current.blouseVariantRows.map((item) => (
+                                            item.key === row.key ? { ...item, inventoryQty: event.target.value } : item
+                                          )),
+                                        }))}
+                                      />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <>

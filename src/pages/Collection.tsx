@@ -19,7 +19,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { subscribeToStorefrontRealtime } from '@/lib/realtimeTables';
 import { buildGa4CartPayload, trackGa4EcommerceEvent } from '@/lib/ga4Ecommerce';
-import { productHasSareeBlousePiece, productMatchesCollectionQuery, productMatchesCollectionScope } from '@/lib/collectionProductFilters';
+import {
+  blouseAttributeOptions,
+  productHasSareeBlousePiece,
+  productMatchesBlouseAttributes,
+  productMatchesCollectionQuery,
+  productMatchesCollectionScope,
+  type BlouseAttributeFilters,
+  type ProductTypeFilter,
+} from '@/lib/collectionProductFilters';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +37,7 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -166,6 +175,12 @@ export default function Collection() {
   const [filterFabrics, setFilterFabrics] = useState<string[]>([]);
   const [filterPatterns, setFilterPatterns] = useState<string[]>([]);
   const [filterOccasions, setFilterOccasions] = useState<string[]>([]);
+  const [selectedProductTypes, setSelectedProductTypes] = useState<ProductTypeFilter[]>(['sarees', 'blouses']);
+  const [blouseAttributeFilters, setBlouseAttributeFilters] = useState<BlouseAttributeFilters>({
+    sleeves: [],
+    necks: [],
+    closeTypes: [],
+  });
   
   const addItem = useCartStore(state => state.addItem);
   const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlistStore();
@@ -178,6 +193,10 @@ export default function Collection() {
   const occasionsParam = searchParams.get('occasions');
   const minPriceParam = searchParams.get('minPrice');
   const maxPriceParam = searchParams.get('maxPrice');
+  const typesParam = searchParams.get('types');
+  const sleevesParam = searchParams.get('sleeves');
+  const necksParam = searchParams.get('necks');
+  const closeTypesParam = searchParams.get('closeTypes');
 
   // Initialize filters from URL params
   useEffect(() => {
@@ -199,13 +218,41 @@ export default function Collection() {
     } else {
       setFilterOccasions([]);
     }
+    setSelectedProductTypes(
+      typesParam === 'none'
+        ? []
+        : typesParam
+          ? typesParam.split(',').filter((type): type is ProductTypeFilter => type === 'sarees' || type === 'blouses')
+          : ['sarees', 'blouses'],
+    );
+    setBlouseAttributeFilters({
+      sleeves: sleevesParam ? sleevesParam.split(',').filter(Boolean) : [],
+      necks: necksParam ? necksParam.split(',').filter(Boolean) : [],
+      closeTypes: closeTypesParam ? closeTypesParam.split(',').filter(Boolean) : [],
+    });
     // Initialize price range from URL params
     const minPrice = minPriceParam ? parseInt(minPriceParam, 10) : 0;
     const maxPrice = maxPriceParam ? parseInt(maxPriceParam, 10) : 50000;
     if (minPriceParam || maxPriceParam) {
       setPriceRange([minPrice, maxPrice]);
     }
-  }, [colorsParam, fabricsParam, patternsParam, occasionsParam, minPriceParam, maxPriceParam]);
+  }, [
+    colorsParam,
+    fabricsParam,
+    patternsParam,
+    occasionsParam,
+    minPriceParam,
+    maxPriceParam,
+    typesParam,
+    sleevesParam,
+    necksParam,
+    closeTypesParam,
+  ]);
+
+  const availableBlouseAttributes = useMemo(
+    () => blouseAttributeOptions(products.map((product) => product.node)),
+    [products],
+  );
 
   // Extract available colors from products - derived primarily from title
   const availableColors = useMemo(() => {
@@ -365,6 +412,12 @@ export default function Collection() {
       return price >= priceRange[0] && price <= priceRange[1];
     });
 
+    result = result.filter((product) => productMatchesBlouseAttributes(
+      product.node,
+      blouseAttributeFilters,
+      selectedProductTypes,
+    ));
+
     // Blouse filter - 'none' and 'all' both show all products
     if (blouseFilter === 'with-blouse') {
       result = result.filter(p => hasBlouse(p));
@@ -422,7 +475,15 @@ export default function Collection() {
     
     setUnavailableFilters(unavailable);
     setFilteredProducts(result);
-  }, [products, sortBy, priceRange, blouseFilter, selectedColors]);
+  }, [
+    products,
+    sortBy,
+    priceRange,
+    blouseFilter,
+    selectedColors,
+    selectedProductTypes,
+    blouseAttributeFilters,
+  ]);
 
 
   const handleAddToCart = (product: ShopifyProduct) => {
@@ -495,6 +556,23 @@ export default function Collection() {
     );
   };
 
+  const toggleProductType = (value: ProductTypeFilter) => {
+    setSelectedProductTypes((current) => (
+      current.includes(value)
+        ? current.filter((type) => type !== value)
+        : [...current, value]
+    ));
+  };
+
+  const toggleBlouseAttribute = (group: keyof BlouseAttributeFilters, value: string) => {
+    setBlouseAttributeFilters((current) => ({
+      ...current,
+      [group]: current[group].includes(value)
+        ? current[group].filter((item) => item !== value)
+        : [...current[group], value],
+    }));
+  };
+
   const handleFilterApply = () => {
     setFilterOpen(false);
     const params = new URLSearchParams();
@@ -502,6 +580,12 @@ export default function Collection() {
     if (filterPatterns.length > 0) params.set('patterns', filterPatterns.join(','));
     if (filterOccasions.length > 0) params.set('occasions', filterOccasions.join(','));
     if (selectedColors.length > 0) params.set('colors', selectedColors.join(','));
+    if (selectedProductTypes.length !== 2) {
+      params.set('types', selectedProductTypes.length ? selectedProductTypes.join(',') : 'none');
+    }
+    if (blouseAttributeFilters.sleeves.length) params.set('sleeves', blouseAttributeFilters.sleeves.join(','));
+    if (blouseAttributeFilters.necks.length) params.set('necks', blouseAttributeFilters.necks.join(','));
+    if (blouseAttributeFilters.closeTypes.length) params.set('closeTypes', blouseAttributeFilters.closeTypes.join(','));
     // Persist price range in URL if not default
     if (priceRange[0] > 0) params.set('minPrice', priceRange[0].toString());
     if (priceRange[1] < maxPrice) params.set('maxPrice', priceRange[1].toString());
@@ -511,14 +595,30 @@ export default function Collection() {
   };
 
   // Check if any filters are selected (including colors)
-  const hasFilterSelections = filterFabrics.length > 0 || filterPatterns.length > 0 || filterOccasions.length > 0 || selectedColors.length > 0;
-  const totalFilterSelections = filterFabrics.length + filterPatterns.length + filterOccasions.length + selectedColors.length;
+  const hasFilterSelections = filterFabrics.length > 0
+    || filterPatterns.length > 0
+    || filterOccasions.length > 0
+    || selectedColors.length > 0
+    || selectedProductTypes.length !== 2
+    || blouseAttributeFilters.sleeves.length > 0
+    || blouseAttributeFilters.necks.length > 0
+    || blouseAttributeFilters.closeTypes.length > 0;
+  const totalFilterSelections = filterFabrics.length
+    + filterPatterns.length
+    + filterOccasions.length
+    + selectedColors.length
+    + (selectedProductTypes.length !== 2 ? 1 : 0)
+    + blouseAttributeFilters.sleeves.length
+    + blouseAttributeFilters.necks.length
+    + blouseAttributeFilters.closeTypes.length;
 
   const clearFilterSelections = () => {
     setFilterFabrics([]);
     setFilterPatterns([]);
     setFilterOccasions([]);
     setSelectedColors([]);
+    setSelectedProductTypes(['sarees', 'blouses']);
+    setBlouseAttributeFilters({ sleeves: [], necks: [], closeTypes: [] });
   };
 
   const handleCategoryNavigation = (href: string) => {
@@ -534,6 +634,8 @@ export default function Collection() {
     setFilterFabrics([]);
     setFilterPatterns([]);
     setFilterOccasions([]);
+    setSelectedProductTypes(['sarees', 'blouses']);
+    setBlouseAttributeFilters({ sleeves: [], necks: [], closeTypes: [] });
     navigate('/collections/all');
   };
 
@@ -542,14 +644,29 @@ export default function Collection() {
   const urlPatterns = patternsParam ? patternsParam.split(',').map(p => p.trim()) : [];
   const urlOccasions = occasionsParam ? occasionsParam.split(',').map(o => o.trim()) : [];
   const urlColors = colorsParam ? colorsParam.split(',').map(c => c.trim()) : [];
-  const hasUrlFilters = urlFabrics.length > 0 || urlPatterns.length > 0 || urlOccasions.length > 0 || urlColors.length > 0;
+  const urlSleeves = sleevesParam ? sleevesParam.split(',').map(value => value.trim()) : [];
+  const urlNecks = necksParam ? necksParam.split(',').map(value => value.trim()) : [];
+  const urlCloseTypes = closeTypesParam ? closeTypesParam.split(',').map(value => value.trim()) : [];
+  const hasUrlFilters = urlFabrics.length > 0
+    || urlPatterns.length > 0
+    || urlOccasions.length > 0
+    || urlColors.length > 0
+    || Boolean(typesParam)
+    || urlSleeves.length > 0
+    || urlNecks.length > 0
+    || urlCloseTypes.length > 0;
 
   const activeFiltersCount = (priceRange[0] > 0 || priceRange[1] < maxPrice ? 1 : 0) + 
     (blouseFilter !== 'none' ? 1 : 0) + 
     selectedColors.length +
-    urlFabrics.length + urlPatterns.length + urlOccasions.length + urlColors.length;
+    urlFabrics.length + urlPatterns.length + urlOccasions.length + urlColors.length
+    + (typesParam ? 1 : 0)
+    + urlSleeves.length + urlNecks.length + urlCloseTypes.length;
 
-  const clearUrlFilter = (type: 'fabrics' | 'patterns' | 'occasions' | 'colors', value: string) => {
+  const clearUrlFilter = (
+    type: 'fabrics' | 'patterns' | 'occasions' | 'colors' | 'sleeves' | 'necks' | 'closeTypes',
+    value: string,
+  ) => {
     const newParams = new URLSearchParams(searchParams);
     const param = newParams.get(type);
     if (param) {
@@ -737,6 +854,49 @@ export default function Collection() {
                   <X className="w-3 h-3" />
                 </button>
               ))}
+              {typesParam && (
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams);
+                    params.delete('types');
+                    navigate(`/collections/all${params.toString() ? `?${params}` : ''}`);
+                  }}
+                  className="flex items-center gap-1 px-3 py-1 bg-accent/10 text-accent text-sm rounded-full hover:bg-accent/20 transition-colors"
+                >
+                  Product type: {selectedProductTypes.length ? selectedProductTypes.join(' + ') : 'None'}
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {urlSleeves.map(value => (
+                <button
+                  key={`sleeves-${value}`}
+                  onClick={() => clearUrlFilter('sleeves', value)}
+                  className="flex items-center gap-1 px-3 py-1 bg-accent/10 text-accent text-sm rounded-full hover:bg-accent/20 transition-colors"
+                >
+                  {value} sleeves
+                  <X className="w-3 h-3" />
+                </button>
+              ))}
+              {urlNecks.map(value => (
+                <button
+                  key={`necks-${value}`}
+                  onClick={() => clearUrlFilter('necks', value)}
+                  className="flex items-center gap-1 px-3 py-1 bg-accent/10 text-accent text-sm rounded-full hover:bg-accent/20 transition-colors"
+                >
+                  {value}
+                  <X className="w-3 h-3" />
+                </button>
+              ))}
+              {urlCloseTypes.map(value => (
+                <button
+                  key={`close-${value}`}
+                  onClick={() => clearUrlFilter('closeTypes', value)}
+                  className="flex items-center gap-1 px-3 py-1 bg-accent/10 text-accent text-sm rounded-full hover:bg-accent/20 transition-colors"
+                >
+                  {value}
+                  <X className="w-3 h-3" />
+                </button>
+              ))}
               <button
                 onClick={() => navigate('/collections/all')}
                 className="text-sm text-muted-foreground hover:text-foreground underline"
@@ -765,6 +925,9 @@ export default function Collection() {
                 <SheetContent side="left" className="w-80 overflow-y-auto">
                   <SheetHeader>
                     <SheetTitle className="font-heading">Filters</SheetTitle>
+                    <SheetDescription className="sr-only">
+                      Filter products by type, price, blouse options, color, fabric, pattern, and occasion.
+                    </SheetDescription>
                   </SheetHeader>
                   <div className="py-6 space-y-6">
                     {/* Price Range Filter */}
@@ -783,6 +946,26 @@ export default function Collection() {
                         <span>₹{priceRange[0].toLocaleString()}</span>
                         <span>to</span>
                         <span>₹{priceRange[1].toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-body uppercase tracking-wide mb-4">Product Type</h3>
+                      <div className="space-y-3">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <Checkbox
+                            checked={selectedProductTypes.includes('sarees')}
+                            onCheckedChange={() => toggleProductType('sarees')}
+                          />
+                          <span className="text-sm">Sarees</span>
+                        </label>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <Checkbox
+                            checked={selectedProductTypes.includes('blouses')}
+                            onCheckedChange={() => toggleProductType('blouses')}
+                          />
+                          <span className="text-sm">Blouses</span>
+                        </label>
                       </div>
                     </div>
 
@@ -816,6 +999,27 @@ export default function Collection() {
                         </label>
                       </div>
                     </div>
+
+                    {([
+                      ['sleeves', 'Sleeves', availableBlouseAttributes.sleeves],
+                      ['necks', 'Neck', availableBlouseAttributes.necks],
+                      ['closeTypes', 'Close Type', availableBlouseAttributes.closeTypes],
+                    ] as const).map(([group, label, values]) => values.length > 0 && (
+                      <div key={group}>
+                        <h3 className="text-sm font-body uppercase tracking-wide mb-4">{label}</h3>
+                        <div className="space-y-3">
+                          {values.map((value) => (
+                            <label key={value} className="flex items-center gap-3 cursor-pointer">
+                              <Checkbox
+                                checked={blouseAttributeFilters[group].includes(value)}
+                                onCheckedChange={() => toggleBlouseAttribute(group, value)}
+                              />
+                              <span className="text-sm">{value}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
 
                     {/* Color Filter */}
                     {availableColors.length > 0 && (

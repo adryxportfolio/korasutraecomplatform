@@ -13,6 +13,7 @@ import { Footer } from "@/components/Footer";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { PromotionalPopup } from "@/components/PromotionalPopup";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import { koraSutraStructuredDataLogoUrl } from "@/lib/brandAssets";
 
 const organizationSchema = {
   "@context": "https://schema.org",
@@ -23,7 +24,7 @@ const organizationSchema = {
   url: "https://korasutra.com",
   logo: {
     "@type": "ImageObject",
-    url: "https://korasutra.com/favicon.png",
+    url: koraSutraStructuredDataLogoUrl,
     width: 512,
     height: 512
   },

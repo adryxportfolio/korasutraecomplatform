@@ -10,7 +10,7 @@ globalThis.localStorage = {
   length: 0,
 } as Storage;
 
-const { filterProductsWithImages, mapCatalogProduct } = await import("./shopify");
+const { catalogSupportsExtendedVariants, filterProductsWithImages, mapCatalogProduct } = await import("./shopify");
 
 function product(handle: string, imageUrl?: string): ShopifyProduct {
   return {
@@ -53,6 +53,14 @@ describe("shopify product image guards", () => {
   });
 });
 
+describe("shopify catalog schema rollout", () => {
+  test("uses extended variant columns only after the migration marker is present", () => {
+    expect(catalogSupportsExtendedVariants(null)).toBe(false);
+    expect(catalogSupportsExtendedVariants({ commerceSchemaVersion: 1 })).toBe(false);
+    expect(catalogSupportsExtendedVariants({ commerceSchemaVersion: 2 })).toBe(true);
+  });
+});
+
 describe("shopify catalog pricing", () => {
   test("maps compare-at prices onto storefront variants and product price ranges", () => {
     const item = mapCatalogProduct({
@@ -76,6 +84,10 @@ describe("shopify catalog pricing", () => {
         option1_value: null,
         option2_name: null,
         option2_value: null,
+        option3_name: null,
+        option3_value: null,
+        option4_name: null,
+        option4_value: null,
         price: 1999,
         compare_at_price: 2999,
         inventory_qty: 1,
@@ -95,8 +107,8 @@ describe("shopify catalog pricing", () => {
   });
 });
 
-describe("shopify blouse size options", () => {
-  test("maps independently stocked blouse variants into an ordered Size option", () => {
+describe("shopify blouse options", () => {
+  test("maps four independently stocked blouse options in order", () => {
     const item = mapCatalogProduct({
       id: "product-blouse",
       title: "Silk Blouse",
@@ -120,6 +132,10 @@ describe("shopify blouse size options", () => {
           option1_value: "38",
           option2_name: null,
           option2_value: null,
+          option3_name: null,
+          option3_value: null,
+          option4_name: null,
+          option4_value: null,
           price: 2499,
           compare_at_price: null,
           inventory_qty: 5,
@@ -132,8 +148,12 @@ describe("shopify blouse size options", () => {
           title: "Size 34",
           option1_name: "Size",
           option1_value: "34",
-          option2_name: null,
-          option2_value: null,
+          option2_name: "Sleeves",
+          option2_value: "Sleeveless",
+          option3_name: "Neck",
+          option3_value: "Halter",
+          option4_name: "Close Type",
+          option4_value: "Zip",
           price: 2499,
           compare_at_price: null,
           inventory_qty: 2,
@@ -143,7 +163,12 @@ describe("shopify blouse size options", () => {
       ],
     });
 
-    expect(item.node.options).toEqual([{ name: "Size", values: ["34", "38"] }]);
+    expect(item.node.options).toEqual([
+      { name: "Size", values: ["34", "38"] },
+      { name: "Sleeves", values: ["Sleeveless"] },
+      { name: "Neck", values: ["Halter"] },
+      { name: "Close Type", values: ["Zip"] },
+    ]);
     expect(item.node.variants.edges.map(({ node }) => ({
       title: node.title,
       quantityAvailable: node.quantityAvailable,
@@ -152,7 +177,12 @@ describe("shopify blouse size options", () => {
       {
         title: "Size 34",
         quantityAvailable: 2,
-        selectedOptions: [{ name: "Size", value: "34" }],
+        selectedOptions: [
+          { name: "Size", value: "34" },
+          { name: "Sleeves", value: "Sleeveless" },
+          { name: "Neck", value: "Halter" },
+          { name: "Close Type", value: "Zip" },
+        ],
       },
       {
         title: "Size 38",
