@@ -78,7 +78,7 @@ import { buildEditableJournalRows } from "@/lib/journalAdminRows";
 import { buildAddToCartUrl } from "@/lib/addToCartUrl";
 import {
   buildAdminProductImages,
-  findNonCloudinaryMediaUrls,
+  findInvalidMediaUrls,
   findShopifyCdnMediaUrls,
   moveAdminProductImage,
   removeAdminProductImage,
@@ -781,13 +781,13 @@ export default function Admin() {
         images: productImages,
         videos: uploadedVideo.url ? [uploadedVideo] : [],
       });
-      if (shopifyMediaUrls.length) throw new Error("Please upload product media to Cloudinary instead of Shopify CDN");
-      const nonCloudinaryMediaUrls = isLocalAdmin ? [] : findNonCloudinaryMediaUrls({
+      if (shopifyMediaUrls.length) throw new Error("Please upload product media to the store instead of Shopify CDN");
+      const invalidMediaUrls = isLocalAdmin ? [] : findInvalidMediaUrls({
         images: productImages,
         videos: uploadedVideo.url ? [uploadedVideo] : [],
       });
-      if (nonCloudinaryMediaUrls.length) throw new Error("Please upload product media to Cloudinary before publishing");
-      if (productForm.status === "active" && productImages.length === 0) throw new Error("Add at least one Cloudinary product photo before publishing");
+      if (invalidMediaUrls.length) throw new Error("Product media must be a valid image URL before publishing");
+      if (productForm.status === "active" && productImages.length === 0) throw new Error("Add at least one product photo before publishing");
       const catalogTags = tagsForCatalogSelection(productForm.catalogSelection);
       const result = await api({
         method: "POST",
@@ -1036,9 +1036,9 @@ export default function Admin() {
       const products: AdminImportProduct[] = parseShopifyProductsCsv(text);
       if (!products.length) throw new Error("No importable products found in CSV");
       const shopifyMediaUrls = products.flatMap((product) => findShopifyCdnMediaUrls({ images: product.images }));
-      if (shopifyMediaUrls.length) throw new Error("CSV product images must be migrated to Cloudinary before import");
-      const nonCloudinaryMediaUrls = isLocalAdmin ? [] : products.flatMap((product) => findNonCloudinaryMediaUrls({ images: product.images }));
-      if (nonCloudinaryMediaUrls.length) throw new Error("CSV product images must use Cloudinary URLs before import");
+      if (shopifyMediaUrls.length) throw new Error("CSV product images must be re-hosted off Shopify CDN before import");
+      const invalidMediaUrls = isLocalAdmin ? [] : products.flatMap((product) => findInvalidMediaUrls({ images: product.images }));
+      if (invalidMediaUrls.length) throw new Error("CSV product images must use valid image URLs before import");
 
       const result = await api({
         method: "POST",
@@ -1812,7 +1812,7 @@ export default function Admin() {
                         <div className="w-16 h-20 bg-secondary/30 rounded-sm overflow-hidden">
                           <video src={productForm.videoDataUrl || productForm.videoUrl} className="w-full h-full object-cover" muted playsInline preload="metadata" />
                         </div>
-                        <p className="text-xs text-muted-foreground font-body">Video media is uploaded to Cloudinary and shown in the product gallery.</p>
+                        <p className="text-xs text-muted-foreground font-body">Video media is uploaded to Supabase Storage and shown in the product gallery.</p>
                       </div>
                     )}
                     <label className="flex items-center gap-3 md:col-span-2"><Switch checked={productForm.hasBlousePiece} onCheckedChange={(checked) => setProductForm({ ...productForm, hasBlousePiece: checked })} /> Blouse shown in picture included</label>

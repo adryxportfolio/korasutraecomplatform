@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development --config vite.config.mjs",
     "build:bun": "bun scripts/build-bun.mjs",
     "lint": "eslint .",
-    "media:cloudinary:migrate": "node scripts/migrate-product-media-to-cloudinary.mjs",
+    "media:supabase:migrate": "node scripts/migrate-images-to-supabase.mjs",
     "preview": "vite preview",
     "serve:bun": "bun scripts/serve-bun.mjs"
   },

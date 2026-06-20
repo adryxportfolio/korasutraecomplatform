@@ -26,10 +26,10 @@ export function isShopifyCdnMediaUrl(url: string) {
   }
 }
 
-export function isCloudinaryMediaUrl(url: string) {
+export function isHttpMediaUrl(url: string) {
   try {
-    const host = new URL(url).hostname.toLowerCase();
-    return host === "res.cloudinary.com" || host.endsWith(".cloudinary.com");
+    const protocol = new URL(url).protocol.toLowerCase();
+    return protocol === "https:" || protocol === "http:";
   } catch {
     return false;
   }
@@ -41,10 +41,12 @@ export function findShopifyCdnMediaUrls({ images = [], videos = [] }: ProductMed
     .filter((url) => url && isShopifyCdnMediaUrl(url));
 }
 
-export function findNonCloudinaryMediaUrls({ images = [], videos = [] }: ProductMediaUrlInput) {
+// Product media must be reachable over http(s). Any hosted URL is accepted
+// (uploads go to Supabase Storage); Shopify CDN URLs are rejected separately.
+export function findInvalidMediaUrls({ images = [], videos = [] }: ProductMediaUrlInput) {
   return [...images, ...videos]
     .map((item) => String(item.url || "").trim())
-    .filter((url) => url && !isCloudinaryMediaUrl(url));
+    .filter((url) => url && !isHttpMediaUrl(url));
 }
 
 export function buildAdminProductImages({

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { uploadToCloudinary } from "../_shared/cloudinary.ts";
+import { uploadToSupabaseStorage } from "../_shared/storage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,26 +59,26 @@ serve(async (req: Request): Promise<Response> => {
     const { contentType, bytes } = decodeDataUrl(String(body.dataUrl || ""));
     const mediaType = contentType.startsWith("video/") ? "video" : contentType.startsWith("image/") ? "image" : null;
     if (!mediaType) return json({ error: "Only image and video uploads are supported" }, 400);
-    const maxBytes = mediaType === "video" ? 100 * 1024 * 1024 : 12 * 1024 * 1024;
-    if (bytes.byteLength > maxBytes) return json({ error: mediaType === "video" ? "Video must be smaller than 100MB" : "Image must be smaller than 12MB" }, 400);
+    const maxBytes = mediaType === "video" ? 50 * 1024 * 1024 : 8 * 1024 * 1024;
+    if (bytes.byteLength > maxBytes) return json({ error: mediaType === "video" ? "Video must be smaller than 50MB" : "Image must be smaller than 8MB" }, 400);
 
     const handle = sanitize(String(body.productHandle || "product")) || "product";
     const defaultExtension = mediaType === "video" ? "mp4" : "jpg";
     const fileName = sanitize(String(body.fileName || `${mediaType}.${contentType.split("/")[1] || defaultExtension}`));
-    const folder = `korasutra/catalog/${handle}/${mediaType}s`;
-    const upload = await uploadToCloudinary({ bytes, contentType, fileName, folder });
+    const bucket = mediaType === "video" ? "product-videos" : "product-images";
+    const folder = `${handle}/${mediaType}s`;
+    const upload = await uploadToSupabaseStorage(supabase, { bytes, contentType, fileName, folder, bucket });
 
     return json({
       success: true,
-      path: upload.publicId,
+      path: upload.path,
       url: upload.url,
-      mediaType: upload.resourceType === "video" ? "video" : "image",
+      mediaType,
       contentType,
-      storage: "cloudinary",
-      cloudinary: {
-        publicId: upload.publicId,
-        resourceType: upload.resourceType,
-        format: upload.format,
+      storage: "supabase",
+      supabase: {
+        bucket,
+        path: upload.path,
         bytes: upload.bytes,
       },
     });

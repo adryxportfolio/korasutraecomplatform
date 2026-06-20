@@ -78,19 +78,19 @@ function findShopifyCdnMediaUrls(product: any) {
     .filter((url) => url && isShopifyCdnMediaUrl(url));
 }
 
-function isCloudinaryMediaUrl(url: string) {
+function isHttpMediaUrl(url: string) {
   try {
-    const host = new URL(url).hostname.toLowerCase();
-    return host === "res.cloudinary.com" || host.endsWith(".cloudinary.com");
+    const protocol = new URL(url).protocol.toLowerCase();
+    return protocol === "https:" || protocol === "http:";
   } catch {
     return false;
   }
 }
 
-function findNonCloudinaryMediaUrls(product: any) {
+function findInvalidMediaUrls(product: any) {
   return [...(product.images || []), ...(product.videos || [])]
     .map((item: any) => String(item?.url || "").trim())
-    .filter((url) => url && !isCloudinaryMediaUrl(url));
+    .filter((url) => url && !isHttpMediaUrl(url));
 }
 
 function optionalMoney(value: unknown) {
@@ -174,9 +174,9 @@ async function sendOrderCancelledWhatsapp(order: any) {
 
 async function saveProduct(supabase: any, product: any) {
   const shopifyMediaUrls = findShopifyCdnMediaUrls(product);
-  if (shopifyMediaUrls.length) throw new Error("Product media must be uploaded to Cloudinary instead of Shopify CDN");
-  const nonCloudinaryMediaUrls = findNonCloudinaryMediaUrls(product);
-  if (nonCloudinaryMediaUrls.length) throw new Error("Product media must be uploaded to Cloudinary before publishing");
+  if (shopifyMediaUrls.length) throw new Error("Product media must be re-hosted off Shopify CDN before publishing");
+  const invalidMediaUrls = findInvalidMediaUrls(product);
+  if (invalidMediaUrls.length) throw new Error("Product media must be a valid image URL before publishing");
   const imageInputs = Array.isArray(product.images) ? product.images.filter((image: any) => image?.url).slice(0, 12) : [];
   const videoInputs = Array.isArray(product.videos) ? product.videos.filter((video: any) => video?.url).slice(0, 4) : [];
 
@@ -252,7 +252,7 @@ async function saveProduct(supabase: any, product: any) {
     tags: product.tags || [],
   };
   if (!payload.handle || !payload.title || !payload.price) throw new Error("Title, handle, and price are required");
-  if (payload.status === "active" && imageInputs.length === 0) throw new Error("Active products need at least one Cloudinary product photo");
+  if (payload.status === "active" && imageInputs.length === 0) throw new Error("Active products need at least one product photo");
 
   let saved: { id: string } | null = null;
   let error: any = null;

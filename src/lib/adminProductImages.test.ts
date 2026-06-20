@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildAdminProductImages,
-  findNonCloudinaryMediaUrls,
+  findInvalidMediaUrls,
   findShopifyCdnMediaUrls,
   moveAdminProductImage,
   removeAdminProductImage,
@@ -83,19 +83,19 @@ describe("admin product images", () => {
     ]);
   });
 
-  test("identifies media that is not synced to Cloudinary", () => {
-    expect(findNonCloudinaryMediaUrls({
+  test("flags media that is not a valid http(s) URL", () => {
+    expect(findInvalidMediaUrls({
       images: [
-        { url: "https://res.cloudinary.com/kora/image/upload/front.jpg" },
-        { url: "https://cdn.example.com/front.jpg" },
+        { url: "https://abc.supabase.co/storage/v1/object/public/product-images/front.jpg" },
+        { url: "data:image/png;base64,iVBORw0KGgo=" },
       ],
       videos: [
-        { url: "https://res.cloudinary.com/kora/video/upload/drape.mp4" },
-        { url: "https://cdn.shopify.com/videos/c/o/v/video.mp4" },
+        { url: "https://abc.supabase.co/storage/v1/object/public/product-videos/drape.mp4" },
+        { url: "not-a-url" },
       ],
     })).toEqual([
-      "https://cdn.example.com/front.jpg",
-      "https://cdn.shopify.com/videos/c/o/v/video.mp4",
+      "data:image/png;base64,iVBORw0KGgo=",
+      "not-a-url",
     ]);
   });
 });
