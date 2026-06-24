@@ -38,6 +38,9 @@ const quickLinks = [
   { name: 'New Arrivals', href: '/collections/new-arrivals' },
   { name: 'Best Sellers', href: '/collections/best-sellers' },
   { name: 'All Sarees', href: '/collections/all' },
+  { name: 'Blouses', href: '/collections/blouse' },
+  { name: 'Saree With Blouse Piece', href: '/collections/all?blousePiece=with' },
+  { name: 'Saree Without Blouse', href: '/collections/all?blousePiece=without' },
 ];
 
 export function MegaMenu() {

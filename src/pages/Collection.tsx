@@ -194,6 +194,7 @@ export default function Collection() {
   const minPriceParam = searchParams.get('minPrice');
   const maxPriceParam = searchParams.get('maxPrice');
   const typesParam = searchParams.get('types');
+  const blousePieceParam = searchParams.get('blousePiece');
   const sleevesParam = searchParams.get('sleeves');
   const necksParam = searchParams.get('necks');
   const closeTypesParam = searchParams.get('closeTypes');
@@ -230,6 +231,14 @@ export default function Collection() {
       necks: necksParam ? necksParam.split(',').filter(Boolean) : [],
       closeTypes: closeTypesParam ? closeTypesParam.split(',').filter(Boolean) : [],
     });
+    // "Saree With Blouse Piece" / "Saree Without Blouse" come in via the menu links.
+    if (blousePieceParam === 'with') {
+      setBlouseFilter('with-blouse');
+    } else if (blousePieceParam === 'without') {
+      setBlouseFilter('without-blouse');
+    } else {
+      setBlouseFilter('none');
+    }
     // Initialize price range from URL params
     const minPrice = minPriceParam ? parseInt(minPriceParam, 10) : 0;
     const maxPrice = maxPriceParam ? parseInt(maxPriceParam, 10) : 50000;
@@ -244,6 +253,7 @@ export default function Collection() {
     minPriceParam,
     maxPriceParam,
     typesParam,
+    blousePieceParam,
     sleevesParam,
     necksParam,
     closeTypesParam,
@@ -583,6 +593,8 @@ export default function Collection() {
     if (selectedProductTypes.length !== 2) {
       params.set('types', selectedProductTypes.length ? selectedProductTypes.join(',') : 'none');
     }
+    if (blouseFilter === 'with-blouse') params.set('blousePiece', 'with');
+    else if (blouseFilter === 'without-blouse') params.set('blousePiece', 'without');
     if (blouseAttributeFilters.sleeves.length) params.set('sleeves', blouseAttributeFilters.sleeves.join(','));
     if (blouseAttributeFilters.necks.length) params.set('necks', blouseAttributeFilters.necks.join(','));
     if (blouseAttributeFilters.closeTypes.length) params.set('closeTypes', blouseAttributeFilters.closeTypes.join(','));
@@ -600,6 +612,7 @@ export default function Collection() {
     || filterOccasions.length > 0
     || selectedColors.length > 0
     || selectedProductTypes.length !== 2
+    || blouseFilter !== 'none'
     || blouseAttributeFilters.sleeves.length > 0
     || blouseAttributeFilters.necks.length > 0
     || blouseAttributeFilters.closeTypes.length > 0;
@@ -608,6 +621,7 @@ export default function Collection() {
     + filterOccasions.length
     + selectedColors.length
     + (selectedProductTypes.length !== 2 ? 1 : 0)
+    + (blouseFilter !== 'none' ? 1 : 0)
     + blouseAttributeFilters.sleeves.length
     + blouseAttributeFilters.necks.length
     + blouseAttributeFilters.closeTypes.length;
@@ -618,6 +632,7 @@ export default function Collection() {
     setFilterOccasions([]);
     setSelectedColors([]);
     setSelectedProductTypes(['sarees', 'blouses']);
+    setBlouseFilter('none');
     setBlouseAttributeFilters({ sleeves: [], necks: [], closeTypes: [] });
   };
 
@@ -652,6 +667,7 @@ export default function Collection() {
     || urlOccasions.length > 0
     || urlColors.length > 0
     || Boolean(typesParam)
+    || Boolean(blousePieceParam)
     || urlSleeves.length > 0
     || urlNecks.length > 0
     || urlCloseTypes.length > 0;
@@ -1252,7 +1268,16 @@ export default function Collection() {
                   {blouseFilter !== 'none' && (
                     <span className="text-xs bg-secondary px-2 py-1 rounded flex items-center gap-1 capitalize">
                       {blouseFilter === 'all' ? 'All Sarees' : blouseFilter === 'with-blouse' ? 'With Blouse' : 'Without Blouse'}
-                      <button onClick={() => setBlouseFilter('none')}>
+                      <button
+                        onClick={() => {
+                          setBlouseFilter('none');
+                          if (blousePieceParam) {
+                            const params = new URLSearchParams(searchParams);
+                            params.delete('blousePiece');
+                            navigate(`/collections/${slug || 'all'}${params.toString() ? `?${params}` : ''}`);
+                          }
+                        }}
+                      >
                         <X className="w-3 h-3" />
                       </button>
                     </span>

@@ -305,9 +305,23 @@ export function Navbar({ settings = defaultSiteSettings }: { settings?: SiteSett
               </div>
             </div>
 
-            {/* Logo - Centered, slightly larger */}
+            {/* Logo - Centered. The logo art is a transparent PNG, so it gets a soft
+                backdrop pill that keeps it readable over hero imagery and any page
+                content showing through the transparent header (PC + mobile). */}
             <Link to="/" className="absolute left-1/2 -translate-x-1/2" aria-label="Kora Sutra - Home">
-              <img src={koraSutraLogoUrl} alt="Kora Sutra - Handcrafted Sarees from Bengal" className="h-16 md:h-24 w-auto" />
+              <span
+                className={`block rounded-full px-2 py-0.5 md:px-3 md:py-1 transition-all duration-300 ${
+                  scrolled ? 'bg-transparent' : 'bg-background/70 shadow-soft backdrop-blur-sm'
+                }`}
+              >
+                <img
+                  src={koraSutraLogoUrl}
+                  alt="Kora Sutra - Handcrafted Sarees from Bengal"
+                  className="h-14 md:h-20 w-auto"
+                  width={1400}
+                  height={1103}
+                />
+              </span>
             </Link>
 
             {/* Right: Wishlist, Account, Search, Cart */}
@@ -644,6 +658,18 @@ export function Navbar({ settings = defaultSiteSettings }: { settings?: SiteSett
                 <li>
                   <button onClick={() => handleNavigation('/collections/blouse')} className="flex items-center justify-between w-full py-4 text-lg font-heading tracking-wide text-foreground hover:text-accent transition-colors border-b border-border/50 text-left">
                     Blouse
+                  </button>
+                </li>
+
+                {/* Saree with / without blouse piece quick filters */}
+                <li>
+                  <button onClick={() => handleNavigation('/collections/all?blousePiece=with')} className="flex items-center justify-between w-full py-4 text-base font-body tracking-wide text-foreground/90 hover:text-accent transition-colors border-b border-border/50 text-left">
+                    Saree With Blouse Piece
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => handleNavigation('/collections/all?blousePiece=without')} className="flex items-center justify-between w-full py-4 text-base font-body tracking-wide text-foreground/90 hover:text-accent transition-colors border-b border-border/50 text-left">
+                    Saree Without Blouse
                   </button>
                 </li>
 

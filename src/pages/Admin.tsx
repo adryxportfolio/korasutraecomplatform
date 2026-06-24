@@ -749,15 +749,6 @@ export default function Admin() {
     try {
       const compareAtError = validateCompareAtPrice(productForm.price, productForm.compareAtPrice);
       if (compareAtError) throw new Error(compareAtError);
-      try {
-        const capabilities = await api({
-          method: "POST",
-          body: { action: "capabilities" },
-        });
-        if (capabilities.productVariantsVersion !== 2) throw new Error();
-      } catch {
-        throw new Error("The product variants database upgrade is not deployed yet. Product saving is temporarily disabled to protect inventory.");
-      }
       const variants = buildAdminProductVariants({
         categorySlug: productForm.categorySlug,
         handle: slugify(productForm.title),

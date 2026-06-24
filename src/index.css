@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Dancing+Script:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+/* Google Fonts are loaded from index.html (preconnect + non-blocking stylesheet)
+   instead of a CSS @import here, which would block first paint while the bundled
+   CSS is parsed and then waterfall into a second request. */
 
 @tailwind base;
 @tailwind components;
