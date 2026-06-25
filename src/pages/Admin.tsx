@@ -241,6 +241,7 @@ export default function Admin() {
   const [section, setSection] = useState<AdminSection>("dashboard");
   const [data, setData] = useState<any>({ orders: [], products: [], customers: [], customerActivities: [], inventory: [], categories: [], coupons: [], journals: [], reviews: [], siteSettings: defaultSiteSettings });
   const [isLoading, setIsLoading] = useState(false);
+  const [savingAction, setSavingAction] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<CommerceRealtimeStatus>("connecting");
   const [query, setQuery] = useState("");
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -746,6 +747,8 @@ export default function Admin() {
 
   const saveProduct = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (savingAction) return;
+    setSavingAction("product");
     try {
       const compareAtError = validateCompareAtPrice(productForm.price, productForm.compareAtPrice);
       if (compareAtError) throw new Error(compareAtError);
@@ -803,6 +806,8 @@ export default function Admin() {
       setProductTab("list");
     } catch (error) {
       toast.error("Unable to save product", { description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setSavingAction(null);
     }
   };
 
@@ -1055,6 +1060,8 @@ export default function Admin() {
       toast.error("New passwords do not match");
       return;
     }
+    if (savingAction) return;
+    setSavingAction("password");
     try {
       await api({
         method: "POST",
@@ -1068,11 +1075,15 @@ export default function Admin() {
       toast.success("Password changed");
     } catch (error) {
       toast.error("Unable to change password", { description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setSavingAction(null);
     }
   };
 
   const saveSiteContent = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (savingAction) return;
+    setSavingAction("settings");
     try {
       const [desktopImageUrl, mobileImageUrl] = await Promise.all([
         uploadSiteImage(heroDesktopFile, siteSettingsForm.hero.desktopImageUrl),
@@ -1104,6 +1115,8 @@ export default function Admin() {
       fetchAdminData();
     } catch (error) {
       toast.error("Unable to save website content", { description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setSavingAction(null);
     }
   };
 
@@ -1166,6 +1179,8 @@ export default function Admin() {
 
   const saveCoupon = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (savingAction) return;
+    setSavingAction("coupon");
     try {
       const result = await api({
         method: "POST",
@@ -1188,6 +1203,8 @@ export default function Admin() {
       setCouponTab("list");
     } catch (error) {
       toast.error("Unable to save coupon", { description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setSavingAction(null);
     }
   };
 
@@ -1238,6 +1255,8 @@ export default function Admin() {
 
   const saveJournal = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (savingAction) return;
+    setSavingAction("journal");
     try {
       const imageUrl = await uploadJournalImage();
       const result = await api({
@@ -1260,6 +1279,8 @@ export default function Admin() {
       return result;
     } catch (error) {
       toast.error("Unable to save journal", { description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setSavingAction(null);
     }
   };
 
@@ -1834,7 +1855,7 @@ export default function Admin() {
                     <Field label="SEO Title" className="md:col-span-2"><Input value={productForm.seoTitle} onChange={(e) => setProductForm({ ...productForm, seoTitle: e.target.value })} placeholder="Korasutra product title for Google" /></Field>
                     <Field label="SEO Description" className="md:col-span-2"><Input value={productForm.seoDescription} onChange={(e) => setProductForm({ ...productForm, seoDescription: e.target.value })} placeholder="Short search description for this product" /></Field>
                     <div className="md:col-span-2 flex gap-2">
-                      <Button type="submit">Save & Publish Product</Button>
+                      <Button type="submit" disabled={savingAction === "product"}>{savingAction === "product" ? "Saving…" : "Save & Publish Product"}</Button>
                       <Button type="button" variant="outline" onClick={resetProductForm}>Clear</Button>
                     </div>
                   </form>
@@ -2105,7 +2126,7 @@ export default function Admin() {
                       <ToggleRow label="Display on website" checked={couponForm.displayOnWebsite} onCheckedChange={(checked) => setCouponForm({ ...couponForm, displayOnWebsite: checked })} />
                     </div>
                     <div className="md:col-span-2 flex gap-2">
-                      <Button type="submit">Save Coupon</Button>
+                      <Button type="submit" disabled={savingAction === "coupon"}>{savingAction === "coupon" ? "Saving…" : "Save Coupon"}</Button>
                       <Button type="button" variant="outline" onClick={resetCouponForm}>Clear</Button>
                     </div>
                   </form>
@@ -2204,7 +2225,7 @@ export default function Admin() {
                     <Field label="SEO Title"><Input value={journalForm.seoTitle} onChange={(e) => setJournalForm({ ...journalForm, seoTitle: e.target.value })} /></Field>
                     <Field label="SEO Description"><Input value={journalForm.seoDescription} onChange={(e) => setJournalForm({ ...journalForm, seoDescription: e.target.value })} /></Field>
                     <div className="md:col-span-2 flex gap-2">
-                      <Button type="submit"><Save className="w-4 h-4 mr-2" />Save Journal</Button>
+                      <Button type="submit" disabled={savingAction === "journal"}><Save className="w-4 h-4 mr-2" />{savingAction === "journal" ? "Saving…" : "Save Journal"}</Button>
                       <Button type="button" variant="outline" onClick={resetJournalForm}>Clear</Button>
                     </div>
                   </form>
@@ -2399,7 +2420,7 @@ export default function Admin() {
                   </div>
 
                   <div className="flex justify-end border-t border-border pt-4">
-                    <Button type="submit" className="min-w-48"><Save className="w-4 h-4 mr-2" />Save & Sync Website</Button>
+                    <Button type="submit" className="min-w-48" disabled={savingAction === "settings"}><Save className="w-4 h-4 mr-2" />{savingAction === "settings" ? "Saving…" : "Save & Sync Website"}</Button>
                   </div>
                 </form>
               </Panel>
@@ -2415,7 +2436,7 @@ export default function Admin() {
                   <Field label="Confirm new password">
                     <Input type="password" value={passwordForm.confirmPassword} onChange={(event) => setPasswordForm({ ...passwordForm, confirmPassword: event.target.value })} required minLength={12} />
                   </Field>
-                  <Button type="submit">Change Password</Button>
+                  <Button type="submit" disabled={savingAction === "password"}>{savingAction === "password" ? "Saving…" : "Change Password"}</Button>
                 </form>
               </Panel>
             </div>
