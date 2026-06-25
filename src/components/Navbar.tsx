@@ -280,8 +280,8 @@ export function Navbar({ settings = defaultSiteSettings }: { settings?: SiteSett
           </Link>
         )}
 
-        <nav className="container mx-auto px-4 md:px-6 py-4 bg-transparent overflow-visible">
-          <div className="flex items-center justify-between flex-nowrap">
+        <nav className="container mx-auto px-4 md:px-6 py-2 md:py-3 bg-transparent overflow-visible">
+          <div className="flex items-center justify-between flex-nowrap min-h-[64px] md:min-h-[96px]">
             {/* Left: Hamburger Menu + Desktop Mega Menu */}
             <div className="flex items-center gap-2 shrink-0">
               <button onClick={() => setIsOpen(true)} className="p-2 hover:bg-secondary/50 rounded-md transition-colors lg:hidden" aria-label="Open navigation menu">
