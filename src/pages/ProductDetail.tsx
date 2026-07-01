@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Loader2, Clock, Heart, Share2, Plus, Bell } from 'lucide-react';
+import { ShoppingBag, Loader2, Clock, Heart, Share2, Plus, Minus, Bell } from 'lucide-react';
 import { StockStatus } from '@/components/StockStatus';
 import { fetchProductByHandle, fetchProducts, ShopifyProduct } from '@/lib/shopify';
 import { toTitleCase } from '@/lib/titleCase';
@@ -424,6 +424,7 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  const [quantity, setQuantity] = useState(1);
   const viewedItemKey = useRef("");
 
   const addItem = useCartStore(state => state.addItem);
@@ -487,6 +488,15 @@ export default function ProductDetail() {
 
   const currentVariant = getCurrentVariant();
 
+  const maxSelectableQuantity = currentVariant?.availableForSale && currentVariant?.quantityAvailable && currentVariant.quantityAvailable > 0
+    ? currentVariant.quantityAvailable
+    : 1;
+
+  // Reset the chosen quantity whenever the selected variant (and thus its stock) changes.
+  useEffect(() => {
+    setQuantity(1);
+  }, [selectedVariant]);
+
   useEffect(() => {
     if (!product || !currentVariant) return;
     const viewKey = `${product.id}:${currentVariant.id}`;
@@ -521,13 +531,14 @@ export default function ProductDetail() {
 
     setIsCheckingOut(true);
     try {
+      const maxQuantity = variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1;
       const cartItem = {
         product: { node: product },
         variantId: variant.id,
         variantTitle: variant.title,
         price: variant.price,
-        quantity: 1,
-        maxQuantity: variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1,
+        quantity: Math.min(Math.max(1, quantity), maxQuantity),
+        maxQuantity,
         selectedOptions: variant.selectedOptions,
       };
       addItem(cartItem);
@@ -558,19 +569,20 @@ export default function ProductDetail() {
       return;
     }
 
+    const maxQuantity = variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1;
     const cartItem = {
       product: { node: product },
       variantId: variant.id,
       variantTitle: variant.title,
       price: variant.price,
-      quantity: 1,
-      maxQuantity: variant.quantityAvailable && variant.quantityAvailable > 0 ? variant.quantityAvailable : 1,
+      quantity: Math.min(Math.max(1, quantity), maxQuantity),
+      maxQuantity,
       selectedOptions: variant.selectedOptions,
     };
     addItem(cartItem);
     trackGa4EcommerceEvent("add_to_cart", buildGa4CartPayload([cartItem]));
-    
-    toast.success('Added to cart!', { 
+
+    toast.success('Added to cart!', {
       description: product.title,
       position: 'top-center' 
     });
@@ -868,6 +880,33 @@ export default function ProductDetail() {
                       </Button>
                     ) : currentVariant.availableForSale ? (
                       <>
+                        {/* Quantity Selector */}
+                        {maxSelectableQuantity > 1 && (
+                          <div className="w-full flex items-center justify-between gap-3">
+                            <span className="text-xs md:text-sm font-body uppercase tracking-wide">Quantity</span>
+                            <div className="flex items-center border border-border rounded-full">
+                              <button
+                                type="button"
+                                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                                disabled={quantity <= 1}
+                                aria-label="Decrease quantity"
+                                className="h-10 w-10 flex items-center justify-center rounded-l-full disabled:opacity-40 hover:bg-foreground hover:text-background transition-colors"
+                              >
+                                <Minus className="w-4 h-4" />
+                              </button>
+                              <span className="min-w-[2.5rem] text-center text-sm font-body tabular-nums" aria-live="polite">{quantity}</span>
+                              <button
+                                type="button"
+                                onClick={() => setQuantity((q) => Math.min(maxSelectableQuantity, q + 1))}
+                                disabled={quantity >= maxSelectableQuantity}
+                                aria-label="Increase quantity"
+                                className="h-10 w-10 flex items-center justify-center rounded-r-full disabled:opacity-40 hover:bg-foreground hover:text-background transition-colors"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         {/* Buy Now Button */}
                         <Button
                           onClick={handleBuyNow}

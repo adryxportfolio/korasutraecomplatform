@@ -26,6 +26,17 @@ export type BlouseVariantRow = {
   inventoryQty: string;
 };
 
+// A saved blouse variant that does not fit the four-option (Size / Sleeves / Neck /
+// Close Type) model — e.g. legacy blouses with only a Size option or a bare "Default"
+// variant. These stay editable for stock without being forced into the option matrix.
+export type BlouseSimpleVariantRow = {
+  key: string;
+  sku: string;
+  title: string;
+  inventoryQty: string;
+  optionPairs: Array<{ name: string; value: string }>;
+};
+
 type SavedProductVariant = {
   sku?: string | null;
   title?: string | null;
@@ -50,6 +61,7 @@ type BuildAdminProductVariantsInput = {
   blouseSizeRows: BlouseSizeRow[];
   blouseOptionInputs?: BlouseOptionInputs;
   blouseVariantRows?: BlouseVariantRow[];
+  blouseSimpleRows?: BlouseSimpleVariantRow[];
 };
 
 export type AdminProductVariantInput = {
@@ -73,6 +85,17 @@ export type AdminProductVariantInput = {
 function supportedSize(value: unknown): BlouseSize | null {
   const normalized = String(value || "").trim();
   return BLOUSE_SIZES.includes(normalized as BlouseSize) ? normalized as BlouseSize : null;
+}
+
+function presentOptionPairs(variant: SavedProductVariant) {
+  return [
+    [variant.option1_name, variant.option1_value],
+    [variant.option2_name, variant.option2_value],
+    [variant.option3_name, variant.option3_value],
+    [variant.option4_name, variant.option4_value],
+  ]
+    .map(([name, value]) => ({ name: String(name || "").trim(), value: String(value || "").trim() }))
+    .filter((pair) => pair.name && pair.value);
 }
 
 function optionValue(variant: SavedProductVariant, optionName: string) {
@@ -146,21 +169,32 @@ export function createBlouseEditorState(variants: SavedProductVariant[] = []) {
   const sleeves = uniqueValues(variants.map((variant) => optionValue(variant, "Sleeves")).filter(Boolean));
   const necks = uniqueValues(variants.map((variant) => optionValue(variant, "Neck")).filter(Boolean));
   const closeTypes = uniqueValues(variants.map((variant) => optionValue(variant, "Close Type")).filter(Boolean));
-  const variantRows = variants.map((variant) => {
-    const size = sizeFromVariant(variant) || "";
-    const sleeve = optionValue(variant, "Sleeves");
-    const neck = optionValue(variant, "Neck");
-    const closeType = optionValue(variant, "Close Type");
-    return {
-      key: combinationKey(size, sleeve, neck, closeType),
-      size,
-      sleeves: sleeve,
-      neck,
-      closeType,
-      sku: String(variant.sku || ""),
-      inventoryQty: String(inventoryQuantity(variant.inventory_qty)),
-    };
-  }).filter((row) => row.size && row.sleeves && row.neck && row.closeType);
+  const decorated = variants.map((variant) => ({
+    variant,
+    size: sizeFromVariant(variant) || "",
+    sleeve: optionValue(variant, "Sleeves"),
+    neck: optionValue(variant, "Neck"),
+    closeType: optionValue(variant, "Close Type"),
+  }));
+  const isComplete = (row: typeof decorated[number]) => Boolean(row.size && row.sleeve && row.neck && row.closeType);
+
+  const variantRows: BlouseVariantRow[] = decorated.filter(isComplete).map(({ variant, size, sleeve, neck, closeType }) => ({
+    key: combinationKey(size, sleeve, neck, closeType),
+    size,
+    sleeves: sleeve,
+    neck,
+    closeType,
+    sku: String(variant.sku || ""),
+    inventoryQty: String(inventoryQuantity(variant.inventory_qty)),
+  }));
+
+  const simpleRows: BlouseSimpleVariantRow[] = decorated.filter((row) => !isComplete(row)).map(({ variant }, index) => ({
+    key: String(variant.sku || "") || `blouse-simple-${index}`,
+    sku: String(variant.sku || ""),
+    title: String(variant.title || "").trim() || String(variant.sku || "") || "Default",
+    inventoryQty: String(inventoryQuantity(variant.inventory_qty)),
+    optionPairs: presentOptionPairs(variant),
+  }));
 
   return {
     sizeRows: createBlouseSizeRows(variants),
@@ -170,6 +204,7 @@ export function createBlouseEditorState(variants: SavedProductVariant[] = []) {
       closeTypes: closeTypes.join(", "),
     },
     variantRows,
+    simpleRows,
   };
 }
 
@@ -248,10 +283,47 @@ export function buildAdminProductVariants({
   blouseSizeRows,
   blouseOptionInputs = { sleeves: "", necks: "", closeTypes: "" },
   blouseVariantRows = [],
+  blouseSimpleRows = [],
 }: BuildAdminProductVariantsInput): AdminProductVariantInput[] {
   const productPrice = Number(price || 0);
   const productCompareAtPrice = compareAtPrice ? Number(compareAtPrice) : null;
   const normalizedHandle = skuPart(handle) || "PRODUCT";
+
+  // Legacy blouse whose variants never adopted the four-option matrix: keep its
+  // existing variants (and their options) intact and only carry stock/SKU forward.
+  if (categorySlug === "blouses" && !blouseVariantRows.length && blouseSimpleRows.length) {
+    const seenSimpleSkus = new Set<string>();
+    return blouseSimpleRows.map((row, position) => {
+      const trimmedSku = row.sku.trim();
+      const normalizedSku = skuPart(row.sku);
+      if (!normalizedSku) throw new Error(`Add a SKU for ${row.title || "the blouse variant"}`);
+      if (seenSimpleSkus.has(normalizedSku)) throw new Error(`Duplicate variant SKU: ${trimmedSku}`);
+      seenSimpleSkus.add(normalizedSku);
+
+      const pairs = (row.optionPairs || [])
+        .map((pair) => ({ name: pair.name.trim(), value: pair.value.trim() }))
+        .filter((pair) => pair.name && pair.value)
+        .slice(0, 4);
+
+      return {
+        sku: trimmedSku,
+        title: row.title.trim() || trimmedSku || "Default",
+        option1Name: pairs[0]?.name,
+        option1Value: pairs[0]?.value,
+        option2Name: pairs[1]?.name,
+        option2Value: pairs[1]?.value,
+        option3Name: pairs[2]?.name,
+        option3Value: pairs[2]?.value,
+        option4Name: pairs[3]?.name,
+        option4Value: pairs[3]?.value,
+        price: productPrice,
+        compareAtPrice: productCompareAtPrice,
+        inventoryQty: inventoryQuantity(row.inventoryQty),
+        trackInventory: true,
+        position,
+      };
+    });
+  }
 
   if (categorySlug !== "blouses") {
     return [{

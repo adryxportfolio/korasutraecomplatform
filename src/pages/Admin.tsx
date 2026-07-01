@@ -97,6 +97,7 @@ import {
   type BlouseOptionInputs,
   type BlouseSizeRow,
   type BlouseVariantRow,
+  type BlouseSimpleVariantRow,
 } from "@/lib/blouseVariants";
 import { buildSkuPrefixedHandle } from "@/lib/productHandles";
 
@@ -147,6 +148,7 @@ function createEmptyProductForm() {
     blouseSizeRows: blouseEditor.sizeRows,
     blouseOptionInputs: { ...emptyBlouseOptionInputs },
     blouseVariantRows: [] as BlouseVariantRow[],
+    blouseSimpleRows: [] as BlouseSimpleVariantRow[],
     seoTitle: "",
     seoDescription: "",
     catalogSelection: { fabric: [] as string[], pattern: [] as string[], occasion: [] as string[] },
@@ -249,6 +251,7 @@ export default function Admin() {
   const [couponTab, setCouponTab] = useState("list");
   const [journalTab, setJournalTab] = useState("list");
   const [reviewReplies, setReviewReplies] = useState<Record<string, string>>({});
+  const [inventoryDrafts, setInventoryDrafts] = useState<Record<string, string>>({});
   const [isImporting, setIsImporting] = useState(false);
   const [productXmlFeedUrl, setProductXmlFeedUrl] = useState("");
   const [draggedProductImageIndex, setDraggedProductImageIndex] = useState<number | null>(null);
@@ -555,6 +558,17 @@ export default function Admin() {
     { slug: "blouses", name: "Blouses" },
   ];
   const productImageItems = productForm.imageItems.slice(0, 12);
+  const inventoryGroups = useMemo(() => {
+    const groups = new Map<string, { title: string; variants: any[] }>();
+    for (const variant of (data.inventory || [])) {
+      const key = variant.product?.handle || variant.product?.title || variant.product_id || "ungrouped";
+      if (!groups.has(key)) groups.set(key, { title: variant.product?.title || "Unassigned product", variants: [] });
+      groups.get(key)!.variants.push(variant);
+    }
+    return Array.from(groups.values())
+      .map((group) => ({ ...group, variants: group.variants.sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)) }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [data.inventory]);
   const projectedBlouseVariantCount = useMemo(() => {
     if (productForm.categorySlug !== "blouses") return 0;
     const enabledSizes = productForm.blouseSizeRows.filter((row) => row.enabled).length;
@@ -762,6 +776,7 @@ export default function Admin() {
         blouseSizeRows: productForm.blouseSizeRows,
         blouseOptionInputs: productForm.blouseOptionInputs,
         blouseVariantRows: productForm.blouseVariantRows,
+        blouseSimpleRows: productForm.blouseSimpleRows,
       });
       const productHandle = buildSkuPrefixedHandle(variants[0]?.sku || "", productForm.title);
 
@@ -851,6 +866,7 @@ export default function Admin() {
       blouseSizeRows: blouseEditor.sizeRows,
       blouseOptionInputs: blouseEditor.optionInputs,
       blouseVariantRows: blouseEditor.variantRows,
+      blouseSimpleRows: blouseEditor.simpleRows,
       seoTitle: product.seo_title || "",
       seoDescription: product.seo_description || "",
       catalogSelection: selectionFromTags(product.tags || []),
@@ -1173,6 +1189,27 @@ export default function Admin() {
     } catch (error) {
       toast.error("Inventory update failed", { description: error instanceof Error ? error.message : undefined });
     }
+  };
+
+  const clearInventoryDraft = (variantId: string) => {
+    setInventoryDrafts((current) => {
+      if (!(variantId in current)) return current;
+      const next = { ...current };
+      delete next[variantId];
+      return next;
+    });
+  };
+
+  const setInventoryTo = async (variant: any, rawValue: string) => {
+    const target = Math.floor(Number(rawValue));
+    if (!rawValue.trim() || !Number.isFinite(target) || target < 0) {
+      toast.error("Enter a stock quantity of 0 or more");
+      return;
+    }
+    const delta = target - Number(variant.inventory_qty || 0);
+    clearInventoryDraft(variant.id);
+    if (delta === 0) return;
+    await adjustInventory(variant.id, delta);
   };
 
   const splitList = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -1715,6 +1752,47 @@ export default function Admin() {
                             </table>
                           </div>
                         )}
+                        {productForm.blouseVariantRows.length === 0 && productForm.blouseSimpleRows.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground font-body">
+                              This blouse&apos;s existing variants aren&apos;t on the Size / Sleeves / Neck / Close Type matrix yet. Update their stock below, or add option values above to rebuild them as full variations.
+                            </p>
+                            <div className="overflow-x-auto rounded-sm border border-border">
+                              <table className="w-full min-w-[520px] text-sm">
+                                <thead>
+                                  <tr className="border-b border-border bg-secondary/20 text-left">
+                                    <th className="p-3">Variant</th>
+                                    <th className="p-3">SKU</th>
+                                    <th className="p-3 w-32">Stock</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {productForm.blouseSimpleRows.map((row) => (
+                                    <tr key={row.key} className="border-b border-border last:border-0">
+                                      <td className="p-3 font-body">{row.title}</td>
+                                      <td className="p-3 font-mono text-xs">{row.sku}</td>
+                                      <td className="p-3">
+                                        <Input
+                                          value={row.inventoryQty}
+                                          aria-label={`Inventory for ${row.title}`}
+                                          type="number"
+                                          min="0"
+                                          step="1"
+                                          onChange={(event) => setProductForm((current) => ({
+                                            ...current,
+                                            blouseSimpleRows: current.blouseSimpleRows.map((item) => (
+                                              item.key === row.key ? { ...item, inventoryQty: event.target.value } : item
+                                            )),
+                                          }))}
+                                        />
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -1887,22 +1965,70 @@ export default function Admin() {
 
           {section === "inventory" && (
             <Panel title="Inventory">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left border-b border-border"><th className="py-2">SKU</th><th>Product</th><th>Variant</th><th>Qty</th><th>Flag</th><th>Adjust</th></tr></thead>
-                  <tbody>
-                    {data.inventory.map((variant: any) => (
-                      <tr key={variant.id} className="border-b border-border last:border-0">
-                        <td className="py-3 font-mono">{variant.sku}</td>
-                        <td>{variant.product?.title}</td>
-                        <td>{variant.option1_name === "Size" && variant.option1_value ? `Size ${variant.option1_value}` : variant.title || "Default"}</td>
-                        <td>{variant.inventory_qty}</td>
-                        <td>{Number(variant.inventory_qty) <= 2 ? <Badge className="bg-red-100 text-red-800 border-red-200">Low Stock</Badge> : <Badge variant="outline">OK</Badge>}</td>
-                        <td className="flex gap-2 py-2"><Button size="sm" variant="outline" onClick={() => adjustInventory(variant.id, -1)}>-1</Button><Button size="sm" variant="outline" onClick={() => adjustInventory(variant.id, 1)}>+1</Button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <p className="mb-4 text-xs text-muted-foreground font-body">
+                Type a stock quantity and press Enter (or Set) to update a variant, or use −1 / +1 for quick changes. Variants are grouped by product.
+              </p>
+              <div className="space-y-6">
+                {inventoryGroups.length === 0 && (
+                  <p className="text-sm text-muted-foreground font-body">No variants to manage yet.</p>
+                )}
+                {inventoryGroups.map((group) => (
+                  <div key={group.title} className="rounded-sm border border-border overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 bg-secondary/20 px-3 py-2 border-b border-border">
+                      <p className="font-heading text-sm">{group.title}</p>
+                      <span className="text-xs text-muted-foreground">{group.variants.length} variant{group.variants.length === 1 ? "" : "s"}</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[640px] text-sm">
+                        <thead><tr className="text-left border-b border-border"><th className="p-3">SKU</th><th className="p-3">Variant</th><th className="p-3 w-16">Qty</th><th className="p-3">Flag</th><th className="p-3 w-64">Set stock</th></tr></thead>
+                        <tbody>
+                          {group.variants.map((variant: any) => {
+                            const variantLabel = variant.title && variant.title !== "Default"
+                              ? variant.title
+                              : (variant.option1_name === "Size" && variant.option1_value ? `Size ${variant.option1_value}` : "Default");
+                            const draftValue = inventoryDrafts[variant.id] ?? String(variant.inventory_qty ?? 0);
+                            return (
+                              <tr key={variant.id} className="border-b border-border last:border-0 align-middle">
+                                <td className="p-3 font-mono text-xs">{variant.sku}</td>
+                                <td className="p-3">{variantLabel}</td>
+                                <td className="p-3">{variant.inventory_qty}</td>
+                                <td className="p-3">{Number(variant.inventory_qty) <= 2 ? <Badge className="bg-red-100 text-red-800 border-red-200">Low Stock</Badge> : <Badge variant="outline">OK</Badge>}</td>
+                                <td className="p-3">
+                                  <div className="flex items-center gap-2">
+                                    <Button size="sm" variant="outline" onClick={() => adjustInventory(variant.id, -1)} aria-label={`Decrease stock for ${variant.sku}`}>−1</Button>
+                                    <Input
+                                      className="w-20"
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={draftValue}
+                                      aria-label={`Stock quantity for ${variant.sku}`}
+                                      onChange={(event) => setInventoryDrafts((current) => ({ ...current, [variant.id]: event.target.value }))}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                          event.preventDefault();
+                                          setInventoryTo(variant, draftValue);
+                                        }
+                                      }}
+                                    />
+                                    <Button size="sm" variant="outline" onClick={() => adjustInventory(variant.id, 1)} aria-label={`Increase stock for ${variant.sku}`}>+1</Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => setInventoryTo(variant, draftValue)}
+                                      disabled={draftValue === String(variant.inventory_qty ?? 0)}
+                                    >
+                                      Set
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
               </div>
             </Panel>
           )}
